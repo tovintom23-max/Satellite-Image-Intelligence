@@ -160,7 +160,7 @@ def safely_record_event(event_type, filename, details=None):
     if analytics storage fails.
     """
     try:
-        record_event(
+        return record_event(
             event_type,
             filename,
             details or {},
@@ -176,7 +176,7 @@ def safely_record_event(event_type, filename, details=None):
 # 4. FILE VALIDATION HELPERS
 # ==========================================================
 
-RGB_EXTENSIONS = {"jpg", "jpeg", "png"}
+RGB_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 TIFF_EXTENSIONS = {"tif", "tiff"}
 
 
@@ -195,27 +195,48 @@ def allowed_tiff_file(filename):
 
 
 def validate_rgb_image(image_path):
+    """Check image content, rather than trusting the file extension.
+
+    This helper does not modify the source image. The upload route
+    separately normalizes supported images to RGB PNG.
+    """
     try:
         with Image.open(image_path) as image:
-            image_format = image.format
-
-            if image_format not in ("JPEG", "PNG"):
+            detected_format = image.format
+            if detected_format not in ("JPEG", "PNG", "WEBP"):
                 raise ValueError(
-                    "File content does not match JPG or PNG."
+                    f"Unsupported image content ({detected_format}). "
+                    "Please upload JPEG, PNG or WebP."
                 )
-
             image.verify()
-            return image_format
-
+        return detected_format
     except Image.DecompressionBombError as error:
-        raise ValueError(
-            "Image dimensions exceed the safety limit."
-        ) from error
+        raise ValueError("Image dimensions exceed the safety limit.") from error
+    except (UnidentifiedImageError, OSError, SyntaxError) as error:
+        raise ValueError("The uploaded file is not a valid supported image.") from error
 
-    except UnidentifiedImageError as error:
-        raise ValueError(
-            "The uploaded file is not a valid image."
-        ) from error
+
+def normalize_rgb_image(source_path, destination_path):
+    """Validate image and write a real RGB PNG to destination_path.
+
+    Source and destination must be distinct. The destination is removed
+    if the conversion fails, avoiding partially written uploads.
+    """
+    validate_rgb_image(source_path)
+    if source_path.resolve() == destination_path.resolve():
+        raise ValueError("Source and destination must be different files.")
+    try:
+        with Image.open(source_path) as image:
+            if image.width < 1 or image.height < 1:
+                raise ValueError("Invalid image dimensions.")
+            rgb = image.convert("RGB")
+            rgb.save(destination_path, format="PNG")
+            return {"width": rgb.width, "height": rgb.height,
+                    "bands": 3, "format": "PNG", "mode": "RGB",
+                    "georeferenced": False, "crs": "Not available"}
+    except Exception:
+        destination_path.unlink(missing_ok=True)
+        raise
 
 
 def validate_tiff(image_path):
@@ -618,118 +639,66 @@ def download_report(filename):
 
 @app.route("/upload", methods=["POST"])
 def upload_image():
-
+    """Accept supported RGB uploads and normalize to a real PNG."""
     if "satellite_image" not in request.files:
-        return render_template(
-            "index.html",
-            error="Please select an image.",
-        ), 400
+        return render_template("index.html", error="Please select an image."), 400
 
     file = request.files["satellite_image"]
-
     if not file.filename:
-        return render_template(
-            "index.html",
-            error="No file was selected.",
-        ), 400
+        return render_template("index.html", error="No file was selected."), 400
 
     original_name = secure_filename(file.filename)
-
-    if not original_name or not allowed_rgb_file(
-        original_name
-    ):
+    if not original_name or not allowed_rgb_file(original_name):
         return render_template(
-            "index.html",
-            error="Upload a valid JPG, JPEG or PNG image.",
+            "index.html", error="Upload a JPG, JPEG, PNG or WebP image."
         ), 400
 
-    unique_name = (
-        f"{uuid.uuid4().hex}."
-        f"{get_extension(original_name)}"
-    )
-
+    token = uuid.uuid4().hex
+    incoming_path = RGB_UPLOAD_FOLDER / f"incoming_{token}.{get_extension(original_name)}"
+    unique_name = f"{token}.png"
     image_path = RGB_UPLOAD_FOLDER / unique_name
-
-    preview_name = (
-        f"preview_{uuid.uuid4().hex}.png"
-    )
-
+    preview_name = f"preview_{uuid.uuid4().hex}.png"
     preview_path = PREVIEW_FOLDER / preview_name
 
     try:
-        file.save(str(image_path))
+        file.save(str(incoming_path))
+        if incoming_path.stat().st_size == 0:
+            raise ValueError("The uploaded image is empty.")
 
-        image_format = validate_rgb_image(
-            image_path
-        )
+        metadata = normalize_rgb_image(incoming_path, image_path)
+        create_rgb_preview(image_path, preview_path)
 
-        create_rgb_preview(
-            image_path,
-            preview_path,
-        )
+        safely_record_event("upload", unique_name, {
+            "original_filename": original_name,
+            "image_type": "RGB Image",
+            "stored_format": "PNG",
+        })
 
-        with Image.open(image_path) as image:
-            metadata = {
-                "width": image.width,
-                "height": image.height,
-                "bands": len(image.getbands()),
-                "format": image_format,
-                "mode": image.mode,
-                "georeferenced": False,
-                "crs": "Not available",
-            }
-
-        safely_record_event(
-            "upload",
-            unique_name,
-            {
-                "original_filename": original_name,
-                "image_type": "RGB Image",
-            },
-        )
-
-        result = {
+        return render_template("index.html", result={
             "filename": original_name,
             "stored_filename": unique_name,
             "image_type": "RGB Image",
             "metadata": metadata,
-            "preview_url": url_for(
-                "uploaded_preview",
-                filename=preview_name,
-            ),
-            "message": (
-                "RGB image uploaded successfully."
-            ),
-        }
-
-        return render_template(
-            "index.html",
-            result=result,
-        )
+            "preview_url": url_for("uploaded_preview", filename=preview_name),
+            "message": "RGB image uploaded successfully.",
+        })
 
     except (ValueError, OSError) as error:
-
         image_path.unlink(missing_ok=True)
         preview_path.unlink(missing_ok=True)
-
+        app.logger.warning("RGB upload rejected (%s): %s", original_name, error)
         return render_template(
-            "index.html",
-            error=f"Image validation failed: {error}",
+            "index.html", error=f"Image validation failed: {error}"
         ), 400
-
     except Exception:
-
         image_path.unlink(missing_ok=True)
         preview_path.unlink(missing_ok=True)
-
-        app.logger.exception(
-            "RGB upload failed."
-        )
-
+        app.logger.exception("RGB upload failed.")
         return render_template(
-            "index.html",
-            error="Unexpected RGB upload error.",
+            "index.html", error="Unexpected RGB upload error."
         ), 500
+    finally:
+        incoming_path.unlink(missing_ok=True)
 
 
 # ==========================================================
@@ -738,141 +707,81 @@ def upload_image():
 
 @app.route("/segment", methods=["POST"])
 def run_segmentation():
-
-    filename = secure_filename(
-        request.form.get("filename", "")
-    )
-
-    if not filename or not allowed_rgb_file(
-        filename
-    ):
-        return render_template(
-            "index.html",
-            error="Select a valid uploaded image.",
-        ), 400
+    # Only process images previously uploaded into the RGB directory.
+    raw_filename = request.form.get("filename", "")
+    filename = secure_filename(raw_filename)
+    if not filename or filename != raw_filename or not allowed_rgb_file(filename):
+        return render_template("index.html", error="Select a valid previously uploaded RGB image."), 400
 
     image_path = RGB_UPLOAD_FOLDER / filename
-
     if not image_path.is_file():
-        return render_template(
-            "index.html",
-            error="Uploaded image not found.",
-        ), 404
+        return render_template("index.html", error="Uploaded image not found."), 404
 
-    processing_filename = (
-        f"processing_{uuid.uuid4().hex}.jpg"
-    )
-
-    processing_path = (
-        PREVIEW_FOLDER / processing_filename
-    )
-
+    processing_path = PREVIEW_FOLDER / f"processing_{uuid.uuid4().hex}.jpg"
     try:
-        image_info = create_processing_copy(
-            image_path,
-            processing_path,
-            max_size=2048,
-        )
+        validate_rgb_image(image_path)
+        image_info = create_processing_copy(image_path, processing_path, max_size=2048)
+        result = segment_image(str(processing_path), str(SEGMENTATION_OUTPUT_FOLDER))
 
-        result = segment_image(
-            str(processing_path),
-            str(SEGMENTATION_OUTPUT_FOLDER),
-        )
+        mask_name = result["mask_filename"]
+        overlay_name = result["overlay_filename"]
+        mask_source = SEGMENTATION_OUTPUT_FOLDER / mask_name
+        overlay_source = SEGMENTATION_OUTPUT_FOLDER / overlay_name
+        if not mask_source.is_file() or not overlay_source.is_file():
+            raise RuntimeError("Segmentation did not generate both output images.")
 
-        mask_source = (
-            SEGMENTATION_OUTPUT_FOLDER
-            / result["mask_filename"]
-        )
+        mask_destination = MASK_FOLDER / mask_name
+        overlay_destination = OVERLAY_FOLDER / overlay_name
+        mask_source.replace(mask_destination)
+        overlay_source.replace(overlay_destination)
 
-        overlay_source = (
-            SEGMENTATION_OUTPUT_FOLDER
-            / result["overlay_filename"]
-        )
-
-        mask_destination = (
-            MASK_FOLDER
-            / result["mask_filename"]
-        )
-
-        overlay_destination = (
-            OVERLAY_FOLDER
-            / result["overlay_filename"]
-        )
-
-        if mask_source.is_file():
-            mask_source.replace(mask_destination)
-
-        if overlay_source.is_file():
-            overlay_source.replace(
-                overlay_destination
-            )
-
-        # Phase 7: Save images and statistics
-        # needed for generating segmentation PDFs.
-
-        safely_record_event(
-            "segmentation",
-            filename,
-            {
+        # IMPORTANT: The checkpoint has five output channels but its original
+        # training label order has not been verified. Preserve provisional labels
+        # in the application and explicitly flag their status in reports.
+        class_statistics = result.get("class_statistics", {})
+        event = safely_record_event(
+            "segmentation", filename, {
                 "original_filename": filename,
-                "image_width": result.get(
-                    "image_width"
+                "image_width": result["image_width"],
+                "image_height": result["image_height"],
+                "original_width": image_info["original_width"],
+                "original_height": image_info["original_height"],
+                "class_statistics": class_statistics,
+                "original_image": f"uploads/rgb/{filename}",
+                "mask_image": f"outputs/segmentation/masks/{mask_name}",
+                "overlay_image": f"outputs/segmentation/overlays/{overlay_name}",
+                "model_architecture": "U-Net with ResNet-50 encoder",
+                "checkpoint_epoch": 6,
+                "class_mapping_verified": False,
+                "class_mapping_note": (
+                    "Five output channels are confirmed; semantic class names "
+                    "and channel order have not been verified against training metadata."
                 ),
-                "image_height": result.get(
-                    "image_height"
-                ),
-                "class_statistics": result.get(
-                    "class_statistics",
-                    {},
-                ),
-                "original_image": (
-                    f"uploads/rgb/{filename}"
-                ),
-                "mask_image": (
-                    "outputs/segmentation/masks/"
-                    + result["mask_filename"]
-                ),
-                "overlay_image": (
-                    "outputs/segmentation/overlays/"
-                    + result["overlay_filename"]
-                ),
-            },
+                "statistics_unit": "pixels",
+            }
         )
-
         return render_template(
             "results.html",
             original_filename=filename,
-            mask_filename=result["mask_filename"],
-            overlay_filename=result[
-                "overlay_filename"
-            ],
-            class_statistics=result[
-                "class_statistics"
-            ],
+            mask_filename=mask_name,
+            overlay_filename=overlay_name,
+            class_statistics=class_statistics,
             image_width=result["image_width"],
             image_height=result["image_height"],
-            original_width=image_info[
-                "original_width"
-            ],
-            original_height=image_info[
-                "original_height"
-            ],
+            original_width=image_info["original_width"],
+            original_height=image_info["original_height"],
+            report_event_id=event.get("id") if isinstance(event, dict) else None,
+            class_mapping_verified=False,
         )
-
+    except (ValueError, OSError) as error:
+        app.logger.warning("Segmentation input rejected: %s", error)
+        return render_template("index.html", error=f"Segmentation input error: {error}"), 400
     except Exception:
-
-        app.logger.exception(
-            "Land-cover segmentation failed."
-        )
-
+        app.logger.exception("Land-cover segmentation failed.")
         return render_template(
             "index.html",
-            error=(
-                "Segmentation failed. "
-                "Check the model checkpoint and terminal."
-            ),
+            error="Segmentation failed. Check the Flask terminal for details.",
         ), 500
-
     finally:
         processing_path.unlink(missing_ok=True)
 

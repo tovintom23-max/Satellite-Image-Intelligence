@@ -372,18 +372,40 @@ def generate_analysis_report(event, base_dir, output_path):
 
         _add_key_value_table(story, {
             "Image Width": details.get("image_width"),
-            "Image Height": details.get("image_height")
+            "Image Height": details.get("image_height"),
+            "Model": details.get("model_architecture", "U-Net / ResNet-50 (provisional)"),
+            "Class Mapping Verified": "Yes" if details.get("class_mapping_verified") is True else "No",
+            "Measurement Unit": "Image pixels (not ground area)",
         })
+        story.append(Paragraph(
+            "Class labels are provisional: the original training class order "
+            "was not included in the model checkpoint. Predictions must not "
+            "be interpreted as validated semantic land-cover categories.",
+            styles["ReportBody"]
+        ))
 
         story.append(Paragraph(
             "Land-Cover Class Statistics",
             styles["Heading3"]
         ))
 
-        _add_class_table(
-            story,
-            details.get("class_statistics", {})
-        )
+        stats = details.get("class_statistics", {})
+        rows = [["Provisional Class", "Pixels", "Percentage"]]
+        if isinstance(stats, dict):
+            for name, item in stats.items():
+                if isinstance(item, dict):
+                    pixels = item.get("pixel_count", item.get("pixels", 0))
+                    percent = item.get("percentage", 0)
+                else:
+                    pixels, percent = item, "N/A"
+                try:
+                    percent = f"{float(percent):.2f}%"
+                except (TypeError, ValueError):
+                    percent = "N/A"
+                rows.append([_safe_text(name), _safe_text(pixels), percent])
+        if len(rows) == 1:
+            rows.append(["No statistics", "-", "-"])
+        _add_table(story, rows, [65 * mm, 50 * mm, 55 * mm])
 
         story.append(Paragraph(
             "3. Image Results",

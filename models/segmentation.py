@@ -1,21 +1,25 @@
 
 """
 Satellite Image Intelligence
-Land-Cover Segmentation Module
+Phase 3 — RGB Land-Cover Segmentation
 
-Expected model checkpoint:
-    checkpoints/segmentation/landcover_segmentation.pth
+Model:
+    U-Net with ResNet encoder
+    segmentation_models_pytorch
 
-Expected function:
+Checkpoint:
+    checkpoints/segmentation/checkpoint.pth.tar
+
+Main Flask function:
     segment_image(image_path, output_dir, predictor=None)
 
 Returns:
     {
-        "mask_filename": "...",
-        "overlay_filename": "...",
-        "class_statistics": {...},
-        "image_width": 0,
-        "image_height": 0
+        "mask_filename": str,
+        "overlay_filename": str,
+        "class_statistics": dict,
+        "image_width": int,
+        "image_height": int
     }
 """
 
@@ -25,9 +29,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-
 from PIL import Image
 
 
@@ -40,19 +42,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CHECKPOINT_PATH = Path(
     os.environ.get(
         "SEGMENTATION_CHECKPOINT",
-        BASE_DIR / "checkpoints" / "segmentation"
-        / "landcover_segmentation.pth"
+        str(
+            BASE_DIR
+            / "checkpoints"
+            / "segmentation"
+            / "checkpoint.pth.tar"
+        )
     )
 )
 
+# CPU-friendly default for an 8 GB RAM laptop.
 DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
+    os.environ.get("SEGMENTATION_DEVICE", "cpu")
 )
 
 INPUT_SIZE = 512
-
 NUM_CLASSES = 5
 
+# These are the application's existing display labels.
+# Verify their mapping against the checkpoint's training dataset.
 CLASS_NAMES = {
     0: "Background",
     1: "Buildings",
@@ -69,16 +77,27 @@ CLASS_COLORS = {
     4: (255, 215, 0)
 }
 
+# Set to "imagenet" or "zero_one" after confirming
+# the normalization used during model training.
+PREPROCESSING = os.environ.get(
+    "SEGMENTATION_PREPROCESSING",
+    "imagenet"
+).lower()
+
+# Avoid excessive CPU thread usage.
+torch.set_num_threads(
+    min(4, os.cpu_count() or 1)
+)
+
+_model = None
+
 
 # ============================================================
-# 2. COLOUR HELPER FUNCTIONS
+# 2. CLASS COLOUR HELPERS
 # ============================================================
 
 def get_class_colour(class_id):
-    """
-    Returns the RGB colour for a class ID.
-    """
-
+    """Return the RGB colour for a class ID."""
     return CLASS_COLORS.get(
         int(class_id),
         (255, 255, 255)
@@ -86,165 +105,191 @@ def get_class_colour(class_id):
 
 
 def get_class_color(class_id):
-    """
-    American spelling compatibility.
-    """
-
+    """American spelling compatibility."""
     return get_class_colour(class_id)
 
 
 # ============================================================
-# 3. SEGMENTATION MODEL ARCHITECTURE
+# 3. CHECKPOINT INSPECTION
 # ============================================================
 
-class ConvBlock(nn.Module):
+def read_checkpoint():
     """
-    Two convolution layers with batch normalization
-    and ReLU activation.
-    """
+    Safely read the checkpoint on CPU.
 
-    def __init__(self, input_channels, output_channels):
-
-        super().__init__()
-
-        self.block = nn.Sequential(
-
-            nn.Conv2d(
-                input_channels,
-                output_channels,
-                kernel_size=3,
-                padding=1,
-                bias=False
-            ),
-
-            nn.BatchNorm2d(output_channels),
-
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(
-                output_channels,
-                output_channels,
-                kernel_size=3,
-                padding=1,
-                bias=False
-            ),
-
-            nn.BatchNorm2d(output_channels),
-
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-
-        return self.block(x)
-
-
-class LandCoverSegmentationModel(nn.Module):
-    """
-    Lightweight encoder-decoder segmentation model.
-
-    Input:
-        RGB image tensor [B, 3, H, W]
-
-    Output:
-        Class logits [B, 5, H, W]
+    This checkpoint contains a dictionary with a
+    'state_dict' entry.
     """
 
-    def __init__(self, num_classes=NUM_CLASSES):
-
-        super().__init__()
-
-        # Encoder
-        self.encoder1 = ConvBlock(3, 32)
-        self.encoder2 = ConvBlock(32, 64)
-        self.encoder3 = ConvBlock(64, 128)
-
-        self.pool = nn.MaxPool2d(2)
-
-        # Bottleneck
-        self.bottleneck = ConvBlock(128, 256)
-
-        # Decoder
-        self.decoder3 = ConvBlock(256 + 128, 128)
-        self.decoder2 = ConvBlock(128 + 64, 64)
-        self.decoder1 = ConvBlock(64 + 32, 32)
-
-        # Classification layer
-        self.output_layer = nn.Conv2d(
-            32,
-            num_classes,
-            kernel_size=1
+    if not CHECKPOINT_PATH.is_file():
+        raise FileNotFoundError(
+            "Phase 3 checkpoint not found:\n"
+            f"{CHECKPOINT_PATH}"
         )
 
-    def forward(self, x):
+    try:
+        checkpoint = torch.load(
+            str(CHECKPOINT_PATH),
+            map_location="cpu",
+            weights_only=True
+        )
+    except Exception as error:
+        raise RuntimeError(
+            "Unable to read the checkpoint safely. "
+            "Verify that it is a valid PyTorch checkpoint. "
+            f"Details: {error}"
+        ) from error
 
-        # Encoder
-        e1 = self.encoder1(x)
-
-        e2 = self.encoder2(
-            self.pool(e1)
+    if not isinstance(checkpoint, dict):
+        raise ValueError(
+            "Expected a checkpoint dictionary."
         )
 
-        e3 = self.encoder3(
-            self.pool(e2)
+    state_dict = checkpoint.get(
+        "state_dict",
+        checkpoint.get("model_state_dict")
+    )
+
+    if not isinstance(state_dict, dict):
+        raise ValueError(
+            "Checkpoint does not contain a valid state_dict."
         )
 
-        # Bottleneck
-        b = self.bottleneck(
-            self.pool(e3)
-        )
+    cleaned_state_dict = {}
 
-        # Decoder level 3
-        d3 = F.interpolate(
-            b,
-            size=e3.shape[2:],
-            mode="bilinear",
-            align_corners=False
-        )
+    for key, value in state_dict.items():
+        if not isinstance(key, str):
+            raise ValueError(
+                "Invalid checkpoint parameter name."
+            )
 
-        d3 = torch.cat([d3, e3], dim=1)
-        d3 = self.decoder3(d3)
+        if key.startswith("module."):
+            key = key[len("module."):]
 
-        # Decoder level 2
-        d2 = F.interpolate(
-            d3,
-            size=e2.shape[2:],
-            mode="bilinear",
-            align_corners=False
-        )
+        cleaned_state_dict[key] = value
 
-        d2 = torch.cat([d2, e2], dim=1)
-        d2 = self.decoder2(d2)
-
-        # Decoder level 1
-        d1 = F.interpolate(
-            d2,
-            size=e1.shape[2:],
-            mode="bilinear",
-            align_corners=False
-        )
-
-        d1 = torch.cat([d1, e1], dim=1)
-        d1 = self.decoder1(d1)
-
-        return self.output_layer(d1)
+    return checkpoint, cleaned_state_dict
 
 
 # ============================================================
-# 4. MODEL LOADING
+# 4. IDENTIFY RESNET ENCODER
 # ============================================================
 
-_model = None
+def identify_encoder(state_dict):
+    """
+    Infer the most likely ResNet encoder from
+    the checkpoint's layer structure.
 
+    ResNet-50:
+        3, 4, 6, 3 bottleneck blocks
+
+    ResNet-101:
+        3, 4, 23, 3 bottleneck blocks
+
+    ResNet-152:
+        3, 8, 36, 3 bottleneck blocks
+    """
+
+    first_layer = state_dict.get(
+        "encoder.conv1.weight"
+    )
+
+    if first_layer is None:
+        raise ValueError(
+            "Checkpoint does not contain "
+            "'encoder.conv1.weight'."
+        )
+
+    if tuple(first_layer.shape) != (64, 3, 7, 7):
+        raise ValueError(
+            "Unexpected first encoder layer shape: "
+            f"{tuple(first_layer.shape)}"
+        )
+
+    block_counts = []
+
+    for stage in range(1, 5):
+        indices = set()
+
+        prefix = f"encoder.layer{stage}."
+
+        for key in state_dict:
+            if key.startswith(prefix):
+                remainder = key[len(prefix):]
+                block_id = remainder.split(".")[0]
+
+                if block_id.isdigit():
+                    indices.add(int(block_id))
+
+        block_counts.append(len(indices))
+
+    architecture_map = {
+        (3, 4, 6, 3): "resnet50",
+        (3, 4, 23, 3): "resnet101",
+        (3, 8, 36, 3): "resnet152"
+    }
+
+    architecture = architecture_map.get(
+        tuple(block_counts)
+    )
+
+    if architecture is None:
+        raise ValueError(
+            "Unsupported or unrecognized ResNet encoder. "
+            f"Detected block counts: {block_counts}"
+        )
+
+    return architecture
+
+
+# ============================================================
+# 5. CREATE MODEL
+# ============================================================
+
+def create_segmentation_model(
+    encoder_name="resnet50",
+    num_classes=NUM_CLASSES
+):
+    """
+    Create a segmentation_models_pytorch U-Net.
+
+    No pretrained encoder weights are downloaded:
+    the checkpoint supplies the trained weights.
+    """
+
+    try:
+        import segmentation_models_pytorch as smp
+    except ImportError as error:
+        raise ImportError(
+            "segmentation_models_pytorch is not installed. "
+            "Run: python -m pip install "
+            "segmentation-models-pytorch"
+        ) from error
+
+    model = smp.Unet(
+        encoder_name=encoder_name,
+        encoder_weights=None,
+        in_channels=3,
+        classes=num_classes,
+        encoder_depth=5,
+        decoder_channels=(256, 128, 64, 32, 16),
+        decoder_use_batchnorm=True,
+        activation=None
+    )
+
+    return model
+
+
+# ============================================================
+# 6. LOAD TRAINED MODEL
+# ============================================================
 
 def load_segmentation_model():
     """
-    Loads the trained segmentation model once.
+    Load the Phase 3 model once and cache it.
 
-    Supports:
-    - TorchScript model.
-    - Complete saved nn.Module.
-    - State dictionary matching the architecture above.
+    Uses strict=True to prevent inference with
+    missing or incorrectly mapped weights.
     """
 
     global _model
@@ -252,295 +297,221 @@ def load_segmentation_model():
     if _model is not None:
         return _model
 
-    if not CHECKPOINT_PATH.is_file():
+    print("\nLoading Phase 3 segmentation model...")
 
-        raise FileNotFoundError(
-            "Segmentation checkpoint was not found.\n"
-            f"Expected location: {CHECKPOINT_PATH}\n"
-            "Place your trained model checkpoint at this location."
+    checkpoint, state_dict = read_checkpoint()
+
+    encoder_name = identify_encoder(state_dict)
+
+    print("Detected encoder:", encoder_name)
+    print("Checkpoint epoch:", checkpoint.get("epoch"))
+
+    output_weight = state_dict.get(
+        "segmentation_head.0.weight"
+    )
+
+    if output_weight is None:
+        raise ValueError(
+            "Checkpoint is missing the segmentation head."
         )
+
+    checkpoint_classes = int(output_weight.shape[0])
+
+    if checkpoint_classes != NUM_CLASSES:
+        raise ValueError(
+            f"Checkpoint has {checkpoint_classes} classes, "
+            f"but this application expects {NUM_CLASSES}."
+        )
+
+    model = create_segmentation_model(
+        encoder_name=encoder_name,
+        num_classes=NUM_CLASSES
+    )
 
     try:
-
-        # Try TorchScript first.
-        try:
-
-            model = torch.jit.load(
-                str(CHECKPOINT_PATH),
-                map_location=DEVICE
-            )
-
-            model.eval()
-            _model = model
-
-            print("TorchScript segmentation model loaded.")
-
-            return _model
-
-        except (RuntimeError, ValueError, OSError):
-            pass
-
-        # Load a trusted local checkpoint.
-        try:
-
-            checkpoint = torch.load(
-                str(CHECKPOINT_PATH),
-                map_location=DEVICE,
-                weights_only=False
-            )
-
-        except TypeError:
-
-            checkpoint = torch.load(
-                str(CHECKPOINT_PATH),
-                map_location=DEVICE
-            )
-
-        # Full model checkpoint.
-        if isinstance(checkpoint, nn.Module):
-
-            model = checkpoint
-
-        else:
-
-            # Extract state dictionary.
-            if isinstance(checkpoint, dict):
-
-                if "model_state_dict" in checkpoint:
-
-                    state_dict = checkpoint["model_state_dict"]
-
-                elif "state_dict" in checkpoint:
-
-                    state_dict = checkpoint["state_dict"]
-
-                else:
-
-                    state_dict = checkpoint
-
-            else:
-
-                raise ValueError(
-                    "Unsupported checkpoint format."
-                )
-
-            if not isinstance(state_dict, dict):
-
-                raise ValueError(
-                    "Checkpoint does not contain a valid state dictionary."
-                )
-
-            # Remove DataParallel prefixes.
-            cleaned_state_dict = {}
-
-            for key, value in state_dict.items():
-
-                if key.startswith("module."):
-
-                    key = key[len("module."):]
-
-                cleaned_state_dict[key] = value
-
-            # Initialize architecture.
-            model = LandCoverSegmentationModel(
-                num_classes=NUM_CLASSES
-            )
-
-            try:
-
-                model.load_state_dict(
-                    cleaned_state_dict,
-                    strict=True
-                )
-
-            except RuntimeError as error:
-
-                raise RuntimeError(
-                    "The checkpoint architecture does not match "
-                    "LandCoverSegmentationModel.\n"
-                    "The model architecture and class count must "
-                    "match the architecture used during training.\n"
-                    f"Original error: {error}"
-                ) from error
-
-        model = model.to(DEVICE)
-        model.eval()
-
-        _model = model
-
-        print(
-            f"Segmentation model loaded successfully on {DEVICE}."
+        model.load_state_dict(
+            state_dict,
+            strict=True
         )
-
-        return _model
-
-    except Exception as error:
-
-        _model = None
-
+    except RuntimeError as error:
         raise RuntimeError(
-            f"Could not load segmentation model: {error}"
+            "Checkpoint architecture mismatch.\n"
+            "The detected ResNet encoder may be correct, "
+            "but the U-Net decoder or the installed SMP "
+            "version may differ from the training setup.\n"
+            "Do not use strict=False to bypass this error.\n"
+            f"Original error:\n{error}"
         ) from error
+
+    model = model.to(DEVICE)
+    model.eval()
+
+    _model = model
+
+    print("Phase 3 model loaded successfully!")
+    print("Device:", DEVICE)
+    print("Classes:", NUM_CLASSES)
+
+    return _model
 
 
 # ============================================================
-# 5. IMAGE PREPROCESSING
+# 7. IMAGE PREPROCESSING
 # ============================================================
 
 def preprocess_image(image):
     """
-    Converts an RGB PIL image into a normalized PyTorch tensor.
+    Convert an RGB PIL image to a model input tensor.
+
+    The normalization must match training.
     """
 
-    resized_image = image.resize(
+    image = image.convert("RGB")
+
+    resized = image.resize(
         (INPUT_SIZE, INPUT_SIZE),
         Image.Resampling.BILINEAR
     )
 
     image_array = np.asarray(
-        resized_image,
+        resized,
         dtype=np.float32
     ) / 255.0
 
-    # ImageNet normalization.
-    mean = np.array(
-        [0.485, 0.456, 0.406],
-        dtype=np.float32
-    )
+    if PREPROCESSING == "imagenet":
+        mean = np.array(
+            [0.485, 0.456, 0.406],
+            dtype=np.float32
+        )
 
-    std = np.array(
-        [0.229, 0.224, 0.225],
-        dtype=np.float32
-    )
+        std = np.array(
+            [0.229, 0.224, 0.225],
+            dtype=np.float32
+        )
 
-    image_array = (image_array - mean) / std
+        image_array = (
+            image_array - mean
+        ) / std
 
-    # HWC -> CHW
+    elif PREPROCESSING == "zero_one":
+        pass
+
+    else:
+        raise ValueError(
+            "Unsupported SEGMENTATION_PREPROCESSING. "
+            "Use 'imagenet' or 'zero_one'."
+        )
+
     image_array = np.transpose(
         image_array,
         (2, 0, 1)
     )
 
     tensor = torch.from_numpy(
-        image_array
+        np.ascontiguousarray(image_array)
     ).unsqueeze(0)
 
     return tensor.to(DEVICE)
 
 
 # ============================================================
-# 6. PREDICTION
+# 8. RUN SEGMENTATION INFERENCE
 # ============================================================
 
 def predict_segmentation(image):
     """
-    Runs model inference and returns a class-ID mask.
+    Predict a segmentation mask for an RGB PIL image.
 
-    Output:
-        NumPy array with shape [original_height, original_width].
+    Returns:
+        2D NumPy array of class IDs at original size.
     """
 
     model = load_segmentation_model()
+
+    image = image.convert("RGB")
 
     original_width, original_height = image.size
 
     input_tensor = preprocess_image(image)
 
     with torch.inference_mode():
+        logits = model(input_tensor)
 
-        prediction = model(input_tensor)
+        if isinstance(logits, dict):
+            logits = logits.get("out")
 
-        # Dictionary output support.
-        if isinstance(prediction, dict):
+        if isinstance(logits, (tuple, list)):
+            logits = logits[0]
 
-            if "out" in prediction:
-
-                prediction = prediction["out"]
-
-            else:
-
-                raise ValueError(
-                    "Model output dictionary must contain an 'out' key."
-                )
-
-        # Tuple/list output support.
-        if isinstance(prediction, (tuple, list)):
-
-            prediction = prediction[0]
-
-        if not isinstance(prediction, torch.Tensor):
-
+        if not isinstance(logits, torch.Tensor):
             raise ValueError(
-                "The segmentation model did not return a tensor."
+                "Model did not return a tensor."
             )
 
-        if prediction.ndim != 4:
-
+        if logits.ndim != 4:
             raise ValueError(
-                "Expected model output shape [B, C, H, W], "
-                f"but received {tuple(prediction.shape)}."
+                "Expected output shape [B, C, H, W]."
             )
 
-        if prediction.shape[1] != NUM_CLASSES:
-
+        if logits.shape[1] != NUM_CLASSES:
             raise ValueError(
-                f"Expected {NUM_CLASSES} output classes, "
-                f"but the model returned {prediction.shape[1]}."
+                f"Expected {NUM_CLASSES} classes, "
+                f"received {logits.shape[1]}."
             )
 
-        # Resize logits to original dimensions.
-        prediction = F.interpolate(
-            prediction,
-            size=(original_height, original_width),
-            mode="bilinear",
-            align_corners=False
-        )
-
-        prediction_mask = torch.argmax(
-            prediction,
+        # Predict at model resolution first to reduce
+        # peak memory usage on CPU.
+        mask = torch.argmax(
+            logits,
             dim=1
         )
 
-    return prediction_mask.squeeze(0).cpu().numpy().astype(
-        np.uint8
-    )
+        mask = mask.unsqueeze(1).float()
+
+        mask = F.interpolate(
+            mask,
+            size=(original_height, original_width),
+            mode="nearest"
+        )
+
+        mask = mask.squeeze(0).squeeze(0)
+
+    return mask.cpu().numpy().astype(np.uint8)
 
 
 # ============================================================
-# 7. CLASS STATISTICS
+# 9. CLASS STATISTICS
 # ============================================================
 
 def calculate_class_statistics(prediction_mask):
     """
-    Calculates pixel counts and percentages for
-    classes actually present in the prediction.
+    Calculate pixel counts and percentages for
+    classes present in the prediction.
     """
 
     prediction_mask = np.asarray(prediction_mask)
 
+    if prediction_mask.ndim != 2:
+        raise ValueError(
+            "Prediction mask must be a 2D array."
+        )
+
     total_pixels = prediction_mask.size
 
     if total_pixels == 0:
-
         raise ValueError(
-            "Prediction mask contains no pixels."
+            "Prediction mask is empty."
         )
 
     class_statistics = {}
 
-    predicted_class_ids = np.unique(prediction_mask)
-
-    for class_id in predicted_class_ids:
-
+    for class_id in np.unique(prediction_mask):
         class_id = int(class_id)
 
         if class_id not in CLASS_NAMES:
-
             raise ValueError(
                 f"Unknown class ID: {class_id}"
             )
-
-        class_name = CLASS_NAMES[class_id]
 
         pixel_count = int(
             np.count_nonzero(
@@ -550,47 +521,52 @@ def calculate_class_statistics(prediction_mask):
 
         percentage = (
             pixel_count / total_pixels
-        ) * 100
+        ) * 100.0
 
         color = get_class_colour(class_id)
 
-        class_statistics[class_name] = {
+        color_hex = "#{:02X}{:02X}{:02X}".format(
+            *color
+        )
+
+        class_statistics[
+            CLASS_NAMES[class_id]
+        ] = {
             "pixel_count": pixel_count,
             "percentage": round(percentage, 2),
-            "color": "#{:02X}{:02X}{:02X}".format(
-                *color
-            )
+            "color": color_hex
         }
 
     return class_statistics
 
 
 # ============================================================
-# 8. CREATE COLOURED SEGMENTATION MASK
+# 10. CREATE COLOURED MASK
 # ============================================================
 
 def create_colored_mask(prediction_mask):
     """
-    Converts class IDs into an RGB segmentation image.
+    Convert a 2D class-ID mask to an RGB PIL image.
     """
 
     prediction_mask = np.asarray(prediction_mask)
 
     if prediction_mask.ndim != 2:
-
         raise ValueError(
-            "Prediction mask must be a 2D array."
+            "Prediction mask must be 2D."
         )
 
-    invalid_classes = (
-        set(np.unique(prediction_mask).tolist())
-        - set(CLASS_NAMES.keys())
+    unique_classes = set(
+        np.unique(prediction_mask).tolist()
+    )
+
+    invalid_classes = unique_classes - set(
+        CLASS_NAMES.keys()
     )
 
     if invalid_classes:
-
         raise ValueError(
-            f"Unknown class IDs in mask: {invalid_classes}"
+            f"Unknown class IDs: {invalid_classes}"
         )
 
     height, width = prediction_mask.shape
@@ -601,7 +577,6 @@ def create_colored_mask(prediction_mask):
     )
 
     for class_id, color in CLASS_COLORS.items():
-
         colored_mask[
             prediction_mask == class_id
         ] = color
@@ -613,222 +588,171 @@ def create_colored_mask(prediction_mask):
 
 
 def create_coloured_mask(prediction_mask):
-    """
-    British spelling compatibility for existing tests.
-    """
-
+    """British spelling compatibility."""
     return create_colored_mask(prediction_mask)
 
 
 # ============================================================
-# 9. CREATE ORIGINAL IMAGE OVERLAY
+# 11. CREATE SEGMENTATION OVERLAY
 # ============================================================
 
 def create_overlay(original_image, colored_mask):
     """
-    Blends the original satellite image with the
-    coloured segmentation mask.
+    Blend the original RGB image and coloured mask.
     """
 
     original_image = original_image.convert("RGB")
-
     colored_mask = colored_mask.convert("RGB")
 
     if original_image.size != colored_mask.size:
-
         raise ValueError(
-            "Original image and segmentation mask "
-            "must have identical dimensions."
+            "Image and mask dimensions must match."
         )
 
-    overlay = Image.blend(
+    return Image.blend(
         original_image,
         colored_mask,
         alpha=0.45
     )
 
-    return overlay
-
 
 # ============================================================
-# 10. MAIN SEGMENTATION FUNCTION
+# 12. COMPLETE SEGMENTATION WORKFLOW
 # ============================================================
 
-def segment_image(image_path, output_dir, predictor=None):
+def segment_image(
+    image_path,
+    output_dir,
+    predictor=None
+):
     """
-    Complete land-cover segmentation workflow.
+    Main function called by Flask.
 
-    Args:
-        image_path:
-            Path to the uploaded RGB satellite image.
+    predictor:
+        Optional testing function that receives a
+        PIL RGB image and returns a 2D class-ID mask.
 
-        output_dir:
-            Folder where generated files are saved.
-
-        predictor:
-            Optional custom prediction function.
-            Used for testing. Receives a PIL RGB image
-            and must return a 2D class-ID NumPy array.
-
-    Returns:
-        Dictionary containing:
-            mask_filename
-            overlay_filename
-            class_statistics
-            image_width
-            image_height
+    The predictor argument preserves compatibility
+    with the existing automated tests.
     """
 
     image_path = Path(image_path)
-
     output_dir = Path(output_dir)
 
-    # Validate input image before entering try block.
     if not image_path.is_file():
-
         raise FileNotFoundError(
             f"Input image not found: {image_path}"
         )
 
-    # Create output directory.
     output_dir.mkdir(
         parents=True,
         exist_ok=True
     )
 
     try:
-
-        # Open uploaded image.
-        with Image.open(image_path) as uploaded_image:
-
-            if uploaded_image.format not in ["JPEG", "PNG"]:
+        with Image.open(image_path) as uploaded:
+            if uploaded.format not in ("JPEG", "PNG", "WEBP"):
                 raise ValueError(
-                    "Segmentation requires a JPG or PNG image."
+                    "Phase 3 accepts JPG and PNG images."
                 )
 
-            original_image = uploaded_image.convert("RGB")
+            original_image = uploaded.convert("RGB")
 
         image_width, image_height = original_image.size
 
-        if image_width == 0 or image_height == 0:
-
+        if image_width <= 0 or image_height <= 0:
             raise ValueError(
-                "Uploaded image has invalid dimensions."
+                "Invalid image dimensions."
             )
 
-        # Generate prediction.
         if predictor is not None:
-
-            prediction_mask = predictor(original_image)
-
+            prediction_mask = predictor(
+                original_image
+            )
         else:
-
             prediction_mask = predict_segmentation(
                 original_image
             )
 
-        # Convert prediction to NumPy array.
         prediction_mask = np.asarray(
             prediction_mask
         )
 
-        # Validate prediction shape.
         if prediction_mask.ndim != 2:
-
             raise ValueError(
-                "Prediction mask must be a 2D array."
+                "Prediction mask must be 2D."
             )
 
         if prediction_mask.shape != (
             image_height,
             image_width
         ):
-
             raise ValueError(
-                "Prediction mask dimensions do not match "
-                "the original image dimensions."
+                "Prediction mask dimensions do not "
+                "match the original image."
             )
 
-        # Validate that class IDs are integers.
         if not np.issubdtype(
             prediction_mask.dtype,
             np.integer
         ):
-
-            if not np.all(
-                np.isfinite(prediction_mask)
-            ) or not np.all(
-                prediction_mask == np.floor(prediction_mask)
+            if (
+                not np.all(np.isfinite(prediction_mask))
+                or not np.all(
+                    prediction_mask
+                    == np.floor(prediction_mask)
+                )
             ):
-
                 raise ValueError(
-                    "Prediction mask must contain integer class IDs."
+                    "Prediction mask must contain "
+                    "integer class IDs."
                 )
 
-        # Convert to uint8 after checking values.
-        if prediction_mask.min() < 0 or prediction_mask.max() > 255:
-
+        if (
+            prediction_mask.min() < 0
+            or prediction_mask.max() >= NUM_CLASSES
+        ):
             raise ValueError(
-                "Prediction mask contains class IDs outside "
-                "the supported range."
+                "Prediction contains invalid class IDs."
             )
 
         prediction_mask = prediction_mask.astype(
             np.uint8
         )
 
-        # Validate class IDs.
-        invalid_classes = (
-            set(np.unique(prediction_mask).tolist())
-            - set(CLASS_NAMES.keys())
-        )
-
-        if invalid_classes:
-
-            raise ValueError(
-                f"Unknown class IDs in prediction: {invalid_classes}"
-            )
-
-        # Calculate class statistics.
         class_statistics = calculate_class_statistics(
             prediction_mask
         )
 
-        # Generate coloured mask.
         colored_mask = create_colored_mask(
             prediction_mask
         )
 
-        # Generate overlay.
         overlay_image = create_overlay(
             original_image,
             colored_mask
         )
 
-        # Unique output filenames.
         unique_id = uuid.uuid4().hex
 
-        mask_filename = f"segmentation_{unique_id}.png"
+        mask_filename = (
+            f"segmentation_{unique_id}.png"
+        )
 
-        overlay_filename = f"overlay_{unique_id}.png"
+        overlay_filename = (
+            f"overlay_{unique_id}.png"
+        )
 
-        mask_path = output_dir / mask_filename
-
-        overlay_path = output_dir / overlay_filename
-
-        # Save mask.
         colored_mask.save(
-            mask_path,
+            output_dir / mask_filename,
             format="PNG"
         )
 
-        # Save overlay.
         overlay_image.save(
-            overlay_path,
+            output_dir / overlay_filename,
             format="PNG"
         )
 
-        # Return results to Flask.
         return {
             "mask_filename": mask_filename,
             "overlay_filename": overlay_filename,
@@ -838,7 +762,26 @@ def segment_image(image_path, output_dir, predictor=None):
         }
 
     except Exception as error:
-
         raise RuntimeError(
             f"Segmentation failed: {error}"
         ) from error
+
+
+# ============================================================
+# 13. DIRECT MODEL TEST
+# ============================================================
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Satellite Image Intelligence")
+    print("Phase 3 — Segmentation Model Test")
+    print("=" * 60)
+
+    print("Checkpoint:", CHECKPOINT_PATH)
+    print("Checkpoint exists:", CHECKPOINT_PATH.is_file())
+
+    model = load_segmentation_model()
+
+    print("\nModel ready for inference.")
+    print("Encoder:", type(model.encoder).__name__)
+    print("Device:", DEVICE)

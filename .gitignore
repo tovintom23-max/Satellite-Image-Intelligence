@@ -1,58 +1,209 @@
 
-# Python
+# ============================================================
+# SATELLITE IMAGE INTELLIGENCE
+# Git Ignore Configuration
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. PYTHON CACHE AND COMPILED FILES
+# ------------------------------------------------------------
+
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+
+# ------------------------------------------------------------
+# 2. VIRTUAL ENVIRONMENTS
+# ------------------------------------------------------------
+
 .venv/
 venv/
 env/
+ENV/
+virtualenv/
 
-# Environment variables and secrets
+
+# ------------------------------------------------------------
+# 3. ENVIRONMENT VARIABLES AND SECRETS
+# ------------------------------------------------------------
+
 .env
 .env.*
 !.env.example
-*.key
+
 *.pem
-credentials.json
+*.key
 service-account*.json
+credentials.json
+secrets.json
 
-# IDE and operating system
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
 
-# User uploads
-uploads/*
-!uploads/.gitkeep
+# ------------------------------------------------------------
+# 4. PYTORCH AND AI MODEL CHECKPOINTS
+# ------------------------------------------------------------
 
-# Generated analysis results
-outputs/*
-!outputs/.gitkeep
+checkpoints/
 
-# Logs and local databases
-*.log
+*.pth
+*.pth.tar
+*.pt
+*.ckpt
+*.onnx
+*.safetensors
+*.h5
+*.hdf5
+*.keras
+*.tflite
+
+
+# ------------------------------------------------------------
+# 5. UPLOADED SATELLITE IMAGES
+# ------------------------------------------------------------
+
+uploads/
+
+# Common geospatial raster datasets
+*.tif
+*.tiff
+*.jp2
+*.img
+*.vrt
+*.nc
+*.hdf
+
+
+# ------------------------------------------------------------
+# 6. GENERATED ANALYSIS OUTPUTS
+# ------------------------------------------------------------
+
+outputs/
+
+# Generated report files
+reports/
+*.pdf
+
+# Temporary raster-processing files
+*.aux.xml
+*.ovr
+*.msi
+*.tmp
+*.temp
+
+
+# ------------------------------------------------------------
+# 7. LOCAL ANALYTICS DATA
+# ------------------------------------------------------------
+
+data/analytics_history.json
+
+# Local databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Trained checkpoints
-checkpoints/segmentation/*.pth
-checkpoints/segmentation/*.pt
-checkpoints/detection/*.pth
-checkpoints/detection/*.pt
 
-# Temporary files
-*.tmp
+# ------------------------------------------------------------
+# 8. LOG FILES
+# ------------------------------------------------------------
+
+*.log
+logs/
+
+
+# ------------------------------------------------------------
+# 9. JUPYTER AND GOOGLE COLAB
+# ------------------------------------------------------------
+
+.ipynb_checkpoints/
+
+# Ignore generated notebook data, but keep .ipynb source files.
+
+
+# ------------------------------------------------------------
+# 10. WINDOWS SYSTEM FILES
+# ------------------------------------------------------------
+
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+
+# ------------------------------------------------------------
+# 11. MACOS AND LINUX SYSTEM FILES
+# ------------------------------------------------------------
+
+.DS_Store
+.AppleDouble
+.LSOverride
+*~
+
+
+# ------------------------------------------------------------
+# 12. VS CODE AND IDE SETTINGS
+# ------------------------------------------------------------
+
+.vscode/
+.idea/
+*.code-workspace
+
+
+# ------------------------------------------------------------
+# 13. BUILD AND PACKAGE FILES
+# ------------------------------------------------------------
+
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+
+# ------------------------------------------------------------
+# 14. TEMPORARY AND BACKUP FILES
+# ------------------------------------------------------------
+
 *.bak
+*.backup
+*.swp
+*.swo
+*.orig
+*.old
+*.part
 
-# Large segmentation model checkpoint
-checkpoints/segmentation/checkpoint.pth.tar
+
+# ============================================================
+# IMPORTANT FILES THAT SHOULD REMAIN TRACKED
+# ============================================================
+
+# app.py
+# config.py
+# requirements.txt
+# README.md
+# .gitignore
+# models/*.py
+# templates/*.html
+# static/css/*.css
+# static/js/*.js
+# tests/*.py
+# notebooks/*.ipynb
+#
+# Keep source code and documentation in GitHub.
+# Keep trained models, uploads and generated results locally.
+# ============================================================
 
 # Generated preview images
 previews/
 static/previews/
 
-# Local analytics history
-data/analytics_history.json
+# Local segmentation test images
+/test_satellite.png
+/test_satellite_fixed.png

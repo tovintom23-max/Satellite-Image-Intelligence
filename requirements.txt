@@ -25,3 +25,4 @@ python-dotenv
 # aitlas==2.0.0
 
 reportlab
+egmentation-models-pytorch
