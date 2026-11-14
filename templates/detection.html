@@ -1,0 +1,464 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Phase 5 | Aerial Object Detection</title>
+
+    <!-- Bootstrap 5 -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <style>
+        body {
+            background: #f4f7fb;
+            color: #172033;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #10243d, #1d5274);
+            color: white;
+            border-radius: 22px;
+        }
+
+        .panel {
+            border: 0;
+            border-radius: 18px;
+            box-shadow: 0 8px 28px rgba(20, 40, 70, 0.08);
+        }
+
+        .preview {
+            width: 100%;
+            max-height: 560px;
+            object-fit: contain;
+            background: #e9eef5;
+            border-radius: 12px;
+        }
+
+        .metric {
+            background: #f0f5fa;
+            border-radius: 14px;
+            padding: 16px;
+            height: 100%;
+        }
+
+        .muted {
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+
+<main class="container py-4 py-lg-5">
+
+    <!-- Page Header -->
+    <section class="hero p-4 p-lg-5 mb-4">
+
+        <span class="badge text-bg-info mb-3">
+            PHASE 5 · OBJECT DETECTION
+        </span>
+
+        <h1 class="display-6 fw-bold">
+            Aerial Object Detection
+        </h1>
+
+        <p class="mb-0">
+            Detect and count the 15 DOTA v1.0 aerial object classes
+            using an oriented-bounding-box model.
+        </p>
+
+    </section>
+
+
+    <!-- Error Message -->
+    {% if error %}
+
+    <div class="alert alert-danger">
+        {{ error }}
+    </div>
+
+    {% endif %}
+
+
+    <!-- Image Upload Section -->
+    <section class="card panel mb-4">
+
+        <div class="card-body p-4">
+
+            <h2 class="h4 mb-3">
+                Upload an RGB satellite or aerial image
+            </h2>
+
+            <form method="POST" enctype="multipart/form-data">
+
+                <div class="mb-3">
+
+                    <label
+                        for="detection_image"
+                        class="form-label fw-semibold"
+                    >
+                        Image file
+                    </label>
+
+                    <input
+                        class="form-control"
+                        id="detection_image"
+                        name="detection_image"
+                        type="file"
+                        accept=".jpg,.jpeg,.png"
+                        required
+                    >
+
+                    <div class="form-text">
+                        Supported formats: JPG, JPEG and PNG.
+                        GeoTIFF multispectral input is handled separately
+                        in Phase 4.
+                    </div>
+
+                </div>
+
+
+                <!-- Confidence Threshold -->
+                <div class="mb-3">
+
+                    <label
+                        for="confidence"
+                        class="form-label fw-semibold"
+                    >
+                        Confidence threshold
+                    </label>
+
+                    <select
+                        class="form-select"
+                        id="confidence"
+                        name="confidence"
+                    >
+
+                        <option value="0.15">
+                            0.15 · More detections, more possible false positives
+                        </option>
+
+                        <option value="0.25" selected>
+                            0.25 · Recommended starting point
+                        </option>
+
+                        <option value="0.40">
+                            0.40 · More conservative
+                        </option>
+
+                        <option value="0.50">
+                            0.50 · High confidence only
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <button
+                    class="btn btn-primary btn-lg"
+                    type="submit"
+                >
+                    Run object detection
+                </button>
+
+            </form>
+
+        </div>
+
+    </section>
+
+
+    <!-- Detection Results -->
+    {% if result %}
+
+    <section class="card panel mb-4">
+
+        <div class="card-body p-4">
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+                <div>
+
+                    <h2 class="h4 mb-1">
+                        Detection results
+                    </h2>
+
+                    <div class="muted small">
+                        {{ result.original_filename }}
+                        ·
+                        {{ result.image_width }} × {{ result.image_height }}
+                    </div>
+
+                </div>
+
+                <span class="badge text-bg-success">
+                    {{ result.total_detections }} objects detected
+                </span>
+
+            </div>
+
+
+            <!-- Annotated Image -->
+            <img
+                class="preview"
+                src="{{ result.annotated_url }}"
+                alt="Image annotated with oriented detection boxes"
+            >
+
+
+            <!-- Image Actions -->
+            <div class="mt-3">
+
+                <a
+                    class="btn btn-outline-primary"
+                    href="{{ result.annotated_url }}"
+                    download
+                >
+                    Download annotated image
+                </a>
+
+                <a
+                    class="btn btn-outline-secondary"
+                    href="{{ result.original_url }}"
+                    target="_blank"
+                >
+                    View original image
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- Detection Metrics -->
+    <section class="row g-3 mb-4">
+
+        <div class="col-sm-6 col-lg-3">
+
+            <div class="metric">
+
+                <div class="muted small">
+                    Total detections
+                </div>
+
+                <div class="display-6 fw-bold">
+                    {{ result.total_detections }}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-sm-6 col-lg-3">
+
+            <div class="metric">
+
+                <div class="muted small">
+                    Confidence threshold
+                </div>
+
+                <div class="display-6 fw-bold">
+                    {{ (result.confidence_threshold * 100)|round|int }}%
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-sm-6 col-lg-3">
+
+            <div class="metric">
+
+                <div class="muted small">
+                    Image width
+                </div>
+
+                <div class="display-6 fw-bold">
+                    {{ result.image_width }}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-sm-6 col-lg-3">
+
+            <div class="metric">
+
+                <div class="muted small">
+                    Image height
+                </div>
+
+                <div class="display-6 fw-bold">
+                    {{ result.image_height }}
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- Object Counts by Class -->
+    <section class="card panel mb-4">
+
+        <div class="card-body p-4">
+
+            <h2 class="h4 mb-3">
+                Object counts by class
+            </h2>
+
+            {% if result.class_counts %}
+
+            <div class="table-responsive">
+
+                <table class="table table-hover align-middle">
+
+                    <thead>
+
+                        <tr>
+                            <th>Class</th>
+                            <th class="text-end">Count</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for class_name, count in result.class_counts.items() %}
+
+                        <tr>
+
+                            <td>
+                                {{ class_name|title }}
+                            </td>
+
+                            <td class="text-end fw-semibold">
+                                {{ count }}
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            {% else %}
+
+            <p class="muted mb-0">
+                No objects passed the selected confidence threshold.
+            </p>
+
+            {% endif %}
+
+        </div>
+
+    </section>
+
+
+    <!-- Individual Detections -->
+    <section class="card panel">
+
+        <div class="card-body p-4">
+
+            <h2 class="h4 mb-3">
+                Individual detections
+            </h2>
+
+            {% if result.detections %}
+
+            <div class="table-responsive">
+
+                <table class="table table-sm table-striped align-middle">
+
+                    <thead>
+
+                        <tr>
+                            <th>#</th>
+                            <th>Object class</th>
+                            <th>Confidence</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for item in result.detections %}
+
+                        <tr>
+
+                            <td>
+                                {{ loop.index }}
+                            </td>
+
+                            <td>
+                                {{ item.class_name|title }}
+                            </td>
+
+                            <td>
+                                {{ item.confidence_percent }}%
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            {% else %}
+
+            <p class="muted mb-0">
+                No objects detected in this image.
+            </p>
+
+            {% endif %}
+
+        </div>
+
+    </section>
+
+    {% endif %}
+
+
+    <!-- Model Information -->
+    <p class="small muted mt-4 mb-0">
+
+        Model: YOLO26n-OBB fine-tuned on DOTA v1.0.
+        Results depend on image resolution, scene similarity,
+        and the trained checkpoint.
+
+    </p>
+
+
+    <!-- Back to Main Application -->
+    <a
+        href="/"
+        class="btn btn-link px-0 mt-2"
+    >
+        ← Back to main application
+    </a>
+
+</main>
+
+</body>
+</html>

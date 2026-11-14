@@ -1,0 +1,1050 @@
+
+/* =========================================================
+   SATELLITE IMAGE INTELLIGENCE
+   Main Stylesheet
+   Homepage + Upload + Preview + Results
+========================================================= */
+
+
+/* =========================================================
+   1. GLOBAL STYLES
+========================================================= */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f3f7f5;
+    color: #24352e;
+    line-height: 1.6;
+}
+
+a {
+    text-decoration: none;
+}
+
+button,
+input {
+    font-family: inherit;
+}
+
+img {
+    max-width: 100%;
+}
+
+
+/* =========================================================
+   2. NAVIGATION BAR
+========================================================= */
+
+.main-navbar {
+    background: #123b2e;
+    padding: 15px 0;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.08);
+}
+
+.main-navbar .navbar-brand {
+    color: #ffffff;
+    font-size: 20px;
+    letter-spacing: 0.2px;
+}
+
+.main-navbar .navbar-brand:hover {
+    color: #c8ead8;
+}
+
+.main-navbar .nav-link {
+    color: #e7f3ec;
+    font-weight: 500;
+    margin-left: 15px;
+    transition: color 0.2s ease;
+}
+
+.main-navbar .nav-link:hover,
+.main-navbar .nav-link.active {
+    color: #9de0b9;
+}
+
+.main-navbar .navbar-toggler {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.main-navbar .navbar-toggler:focus {
+    box-shadow: none;
+}
+
+
+/* =========================================================
+   3. HOMEPAGE HERO SECTION
+========================================================= */
+
+.hero-section {
+    background: linear-gradient(135deg, #123b2e, #247a55);
+    color: #ffffff;
+    padding: 90px 20px;
+    text-align: center;
+}
+
+.hero-section h1 {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 750;
+    margin-bottom: 18px;
+}
+
+.hero-section p {
+    max-width: 750px;
+    margin: 0 auto;
+    color: #e1f1e8;
+    font-size: 17px;
+}
+
+.hero-badge {
+    display: inline-block;
+    padding: 7px 16px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 30px;
+    color: #e0f5e9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+
+/* =========================================================
+   4. GENERAL SECTION HEADINGS
+========================================================= */
+
+.section-heading {
+    margin-bottom: 35px;
+}
+
+.section-heading h2 {
+    color: #173e32;
+    font-size: 30px;
+    font-weight: 750;
+    margin-bottom: 10px;
+}
+
+.section-heading p {
+    color: #64756d;
+    max-width: 700px;
+    margin: 0 auto;
+    font-size: 15px;
+}
+
+.section-subtitle {
+    display: inline-block;
+    color: #218456;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+}
+
+
+/* =========================================================
+   5. UPLOAD SECTION
+========================================================= */
+
+.upload-section {
+    padding: 65px 0;
+}
+
+.upload-card {
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 35px;
+    background: #ffffff;
+    border: 1px solid #e1ebe5;
+    border-radius: 18px;
+    box-shadow: 0 8px 30px rgba(20, 65, 45, 0.07);
+}
+
+.upload-card h2,
+.upload-card h3 {
+    color: #173e32;
+    font-weight: 700;
+}
+
+.upload-card p {
+    color: #64756d;
+}
+
+
+/* =========================================================
+   6. FILE UPLOAD DROPZONE
+========================================================= */
+
+.upload-dropzone {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 230px;
+    padding: 30px;
+    background: #f7fbf8;
+    border: 2px dashed #8abca0;
+    border-radius: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.25s ease;
+}
+
+.upload-dropzone:hover {
+    background: #edf8f1;
+    border-color: #248252;
+}
+
+.upload-dropzone i {
+    font-size: 45px;
+    color: #248252;
+    margin-bottom: 15px;
+}
+
+.upload-dropzone h4 {
+    color: #173e32;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.upload-dropzone p {
+    color: #718078;
+    font-size: 14px;
+    margin-bottom: 0;
+}
+
+.upload-dropzone input[type="file"] {
+    display: none;
+}
+
+
+/* =========================================================
+   7. SELECTED FILE INFORMATION
+========================================================= */
+
+.selected-file {
+    display: none;
+    margin-top: 18px;
+    padding: 15px;
+    background: #edf8f1;
+    border: 1px solid #c9e6d4;
+    border-radius: 10px;
+}
+
+.selected-file i {
+    color: #218456;
+    margin-right: 8px;
+}
+
+.selected-file p {
+    margin: 0;
+    color: #315b45;
+    overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   8. BUTTONS
+========================================================= */
+
+.btn-primary-custom {
+    display: inline-block;
+    padding: 12px 25px;
+    background: #218456;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 650;
+    transition: 0.25s ease;
+}
+
+.btn-primary-custom:hover {
+    background: #176b43;
+    color: #ffffff;
+    transform: translateY(-2px);
+}
+
+.btn-primary-custom:disabled {
+    background: #9abbaa;
+    cursor: not-allowed;
+    transform: none;
+}
+
+
+/* =========================================================
+   9. CLIENT-SIDE IMAGE PREVIEW
+========================================================= */
+
+.client-preview {
+    display: none;
+    margin-top: 25px;
+    padding: 20px;
+    background: #f8fbf9;
+    border: 1px solid #e0ebe4;
+    border-radius: 12px;
+}
+
+.client-preview img {
+    display: block;
+    max-width: 100%;
+    max-height: 350px;
+    margin: 15px auto;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
+.client-preview h5 {
+    color: #173e32;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   10. SERVER UPLOAD RESULT / PREVIEW
+========================================================= */
+
+.upload-result {
+    margin-top: 30px;
+    padding: 22px;
+    background: #f0f8f3;
+    border: 1px solid #cfe6d7;
+    border-radius: 12px;
+}
+
+.upload-result h4 {
+    color: #176b43;
+    font-weight: 700;
+}
+
+.upload-result p {
+    color: #52665a;
+    overflow-wrap: anywhere;
+}
+
+.upload-result img {
+    display: block;
+    max-width: 100%;
+    max-height: 400px;
+    margin: 18px auto;
+    object-fit: contain;
+    border: 1px solid #dce7df;
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+
+/* =========================================================
+   11. ALERT MESSAGES
+========================================================= */
+
+.alert {
+    border-radius: 10px;
+}
+
+.alert-success {
+    background: #edf8f1;
+    color: #176b43;
+    border-color: #c8e5d2;
+}
+
+.alert-danger {
+    background: #fff1f0;
+    color: #a12c25;
+    border-color: #f0ceca;
+}
+
+
+/* =========================================================
+   12. FEATURE CARDS
+========================================================= */
+
+.feature-section {
+    padding: 65px 0;
+}
+
+.feature-card {
+    height: 100%;
+    padding: 28px;
+    background: #ffffff;
+    border: 1px solid #e3ece6;
+    border-radius: 14px;
+    box-shadow: 0 5px 20px rgba(20, 65, 45, 0.05);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 28px rgba(20, 65, 45, 0.1);
+}
+
+.feature-card i {
+    display: inline-block;
+    color: #218456;
+    font-size: 34px;
+    margin-bottom: 15px;
+}
+
+.feature-card h4 {
+    color: #173e32;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.feature-card p {
+    color: #64756d;
+    font-size: 14px;
+    margin-bottom: 0;
+}
+
+
+/* =========================================================
+   13. FOOTER
+========================================================= */
+
+.main-footer {
+    padding: 28px 15px;
+    background: #123b2e;
+    color: #ffffff;
+    margin-top: 50px;
+}
+
+.main-footer p {
+    margin-bottom: 5px;
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.main-footer small {
+    color: #c7dfd1;
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   14. RESULTS PAGE - HERO
+========================================================= */
+
+.results-page {
+    background: #f3f7f5;
+}
+
+.results-hero {
+    padding: 65px 20px 60px;
+    background: linear-gradient(135deg, #123b2e, #247a55);
+    color: #ffffff;
+}
+
+.results-status {
+    display: inline-block;
+    padding: 8px 17px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 30px;
+    color: #d9f5e4;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 1.2px;
+}
+
+.results-hero h1 {
+    color: #ffffff;
+    font-size: clamp(29px, 4vw, 42px);
+    font-weight: 800;
+    margin-bottom: 15px;
+}
+
+.results-hero p {
+    max-width: 760px;
+    margin: 0 auto 20px;
+    color: #e0f0e6;
+    font-size: 16px;
+}
+
+.original-filename {
+    display: inline-block;
+    max-width: 100%;
+    padding: 10px 17px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   15. RESULTS PAGE - MAIN SECTION
+========================================================= */
+
+.results-section {
+    padding: 60px 0;
+}
+
+.results-section .section-heading {
+    margin-bottom: 35px;
+}
+
+
+/* =========================================================
+   16. RESULTS PAGE - IMAGE CARDS
+========================================================= */
+
+.result-image-card {
+    height: 100%;
+    padding: 22px;
+    background: #ffffff;
+    border: 1px solid #e2ebe5;
+    border-radius: 15px;
+    box-shadow: 0 7px 25px rgba(20, 65, 45, 0.06);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.result-image-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(20, 65, 45, 0.1);
+}
+
+.result-card-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.result-card-heading h4 {
+    margin: 0;
+    color: #173e32;
+    font-size: 18px;
+    font-weight: 750;
+}
+
+.result-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    background: #eaf6ee;
+    color: #218456;
+    border-radius: 10px;
+    font-size: 19px;
+}
+
+.result-image-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 230px;
+    padding: 10px;
+    background: #f3f6f4;
+    border: 1px solid #e4eae6;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.result-image {
+    display: block;
+    width: 100%;
+    max-height: 360px;
+    height: auto;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.image-description {
+    margin: 15px 0 0;
+    color: #687970;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+
+/* =========================================================
+   17. RESULTS PAGE - IMAGE INFORMATION
+========================================================= */
+
+.image-information-section {
+    padding-top: 65px;
+}
+
+.summary-card {
+    height: 100%;
+    padding: 25px 20px;
+    background: #ffffff;
+    border: 1px solid #e0ebe4;
+    border-radius: 13px;
+    text-align: center;
+    box-shadow: 0 5px 20px rgba(20, 65, 45, 0.05);
+}
+
+.summary-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 13px;
+    background: #eaf6ee;
+    color: #218456;
+    border-radius: 12px;
+    font-size: 22px;
+}
+
+.summary-card h6 {
+    margin-bottom: 8px;
+    color: #718078;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.summary-card h3 {
+    margin: 0;
+    color: #176b43;
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.summary-card h3 small {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   18. RESULTS PAGE - STATISTICS SECTION
+========================================================= */
+
+.statistics-section {
+    padding-top: 65px;
+}
+
+.statistics-card {
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e1ebe5;
+    border-radius: 15px;
+    box-shadow: 0 7px 25px rgba(20, 65, 45, 0.06);
+}
+
+.statistics-card-header {
+    padding: 23px 25px;
+    background: #f5faf6;
+    border-bottom: 1px solid #e4eee7;
+}
+
+.statistics-card-header h4 {
+    margin-bottom: 5px;
+    color: #173e32;
+    font-size: 19px;
+    font-weight: 750;
+}
+
+.statistics-card-header h4 i {
+    color: #218456;
+}
+
+.statistics-card-header p {
+    margin: 0;
+    color: #718078;
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   19. STATISTICS TABLE
+========================================================= */
+
+.statistics-table {
+    margin-bottom: 0;
+}
+
+.statistics-table thead th {
+    padding: 16px 20px;
+    background: #edf6f0;
+    color: #315b45;
+    border-bottom: 1px solid #dce9e0;
+    font-size: 13px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.statistics-table tbody td {
+    padding: 16px 20px;
+    color: #40554a;
+    border-color: #edf1ee;
+    font-size: 14px;
+}
+
+.statistics-table tbody tr:hover {
+    background: #f8fbf9;
+}
+
+.class-name {
+    color: #173e32 !important;
+    font-weight: 700;
+}
+
+.class-color {
+    display: inline-block;
+    width: 19px;
+    height: 19px;
+    margin-right: 7px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    vertical-align: middle;
+}
+
+.color-code {
+    color: #718078;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.numeric-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   20. PERCENTAGE BARS
+========================================================= */
+
+.percentage-cell {
+    min-width: 130px;
+}
+
+.percentage-cell > span {
+    display: block;
+    margin-bottom: 6px;
+    color: #315b45;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.percentage-track {
+    width: 100%;
+    height: 7px;
+    overflow: hidden;
+    background: #e8eee9;
+    border-radius: 10px;
+}
+
+.percentage-fill {
+    height: 100%;
+    max-width: 100%;
+    background: #26945c;
+    border-radius: 10px;
+}
+
+.statistics-note {
+    padding: 15px 20px;
+    background: #f7faf8;
+    border-top: 1px solid #e8eee9;
+    color: #687970;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.statistics-note i {
+    color: #218456;
+}
+
+
+/* =========================================================
+   21. RESULTS PAGE - ACTION BUTTONS
+========================================================= */
+
+.results-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 13px;
+    margin-top: 40px;
+}
+
+.btn-download,
+.btn-back {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 650;
+    transition: 0.25s ease;
+}
+
+.btn-download {
+    background: #218456;
+    color: #ffffff;
+    border: 1px solid #218456;
+}
+
+.btn-download:hover {
+    background: #176b43;
+    color: #ffffff;
+    border-color: #176b43;
+    transform: translateY(-2px);
+}
+
+.btn-download-secondary {
+    background: #ffffff;
+    color: #218456;
+    border-color: #218456;
+}
+
+.btn-download-secondary:hover {
+    background: #eaf6ee;
+    color: #176b43;
+    border-color: #176b43;
+}
+
+.btn-back {
+    background: #ffffff;
+    color: #315b45;
+    border: 1px solid #cbd9d0;
+}
+
+.btn-back:hover {
+    background: #eaf1ec;
+    color: #173e32;
+    transform: translateY(-2px);
+}
+
+
+/* =========================================================
+   22. RESPONSIVE DESIGN - TABLETS
+========================================================= */
+
+@media (max-width: 991px) {
+
+    .hero-section {
+        padding: 70px 20px;
+    }
+
+    .results-hero {
+        padding: 55px 20px;
+    }
+
+    .result-image-card {
+        padding: 18px;
+    }
+
+    .result-image-wrapper {
+        min-height: 200px;
+    }
+
+}
+
+
+/* =========================================================
+   23. RESPONSIVE DESIGN - MOBILE
+========================================================= */
+
+@media (max-width: 767px) {
+
+    .main-navbar .navbar-brand {
+        font-size: 17px;
+    }
+
+    .hero-section {
+        padding: 55px 18px;
+    }
+
+    .hero-section p {
+        font-size: 15px;
+    }
+
+    .upload-section,
+    .feature-section {
+        padding: 45px 0;
+    }
+
+    .upload-card {
+        padding: 22px 16px;
+    }
+
+    .section-heading h2 {
+        font-size: 25px;
+    }
+
+    .results-hero {
+        padding: 45px 15px;
+    }
+
+    .results-hero h1 {
+        font-size: 29px;
+    }
+
+    .results-hero p {
+        font-size: 14px;
+    }
+
+    .results-section {
+        padding: 40px 0;
+    }
+
+    .result-image-card {
+        margin-bottom: 5px;
+    }
+
+    .result-image-wrapper {
+        min-height: 180px;
+    }
+
+    .result-image {
+        max-height: 300px;
+    }
+
+    .image-information-section,
+    .statistics-section {
+        padding-top: 45px;
+    }
+
+    .statistics-card-header {
+        padding: 18px;
+    }
+
+    .statistics-table thead th,
+    .statistics-table tbody td {
+        padding: 12px;
+        font-size: 12px;
+    }
+
+    .results-actions {
+        flex-direction: column;
+        align-items: stretch;
+        margin-top: 30px;
+    }
+
+    .results-actions .btn {
+        width: 100%;
+    }
+
+    .main-footer {
+        margin-top: 30px;
+    }
+
+}
+
+
+/* =========================================================
+   24. SMALL MOBILE SCREENS
+========================================================= */
+
+@media (max-width: 400px) {
+
+    .main-navbar .navbar-brand {
+        font-size: 15px;
+    }
+
+    .results-hero h1 {
+        font-size: 25px;
+    }
+
+    .original-filename {
+        font-size: 12px;
+    }
+
+    .result-card-heading h4 {
+        font-size: 16px;
+    }
+
+    .summary-card h3 {
+        font-size: 24px;
+    }
+
+}
+/* Land-cover class colours */
+
+.class-color-background {
+    background-color: #808080;
+}
+
+.class-color-buildings {
+    background-color: #ff0000;
+}
+
+.class-color-woodlands {
+    background-color: #228b22;
+}
+
+.class-color-water {
+    background-color: #1e90ff;
+}
+
+.class-color-road {
+    background-color: #ffd700;
+}
+
+
+/* Percentage progress bar */
+
+.percentage-progress {
+    display: block;
+    width: 100%;
+    height: 8px;
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.percentage-progress::-webkit-progress-bar {
+    background-color: #e8eee9;
+    border-radius: 10px;
+}
+
+.percentage-progress::-webkit-progress-value {
+    background-color: #26945c;
+    border-radius: 10px;
+}
+
+.percentage-progress::-moz-progress-bar {
+    background-color: #26945c;
+    border-radius: 10px;
+}
+
+
+/* FIX: Navigation bar background and text visibility */
+
+.navbar.main-navbar {
+    background-color: #123b2e !important;
+    min-height: 72px;
+    padding: 15px 0;
+}
+
+.navbar.main-navbar .navbar-brand {
+    color: #ffffff !important;
+    font-weight: 700;
+}
+
+.navbar.main-navbar .nav-link {
+    color: #ffffff !important;
+}
+
+.navbar.main-navbar .nav-link:hover {
+    color: #9de0b9 !important;
+}
+
+.navbar.main-navbar .navbar-toggler {
+    border: 1px solid #ffffff;
+}
+
+.navbar.main-navbar .navbar-toggler-icon {
+    filter: brightness(0) invert(1);
+}

@@ -1,0 +1,727 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Multispectral AI | Satellite Image Intelligence</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css">
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        body {
+            background: #f3f6fb;
+            color: #172235;
+        }
+
+        .main-navbar {
+            background: #10243b;
+        }
+
+        .ms-page {
+            min-height: 85vh;
+            padding: 45px 0 75px;
+        }
+
+        .ms-panel {
+            background: #fff;
+            border: 1px solid #e1e7ef;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 7px 25px rgba(15, 23, 42, 0.05);
+        }
+
+        .section-heading {
+            font-weight: 700;
+            color: #172235;
+        }
+
+        .upload-area {
+            background: #f8fbff;
+            border: 2px dashed #aabbd1;
+            border-radius: 12px;
+            padding: 28px;
+            text-align: center;
+        }
+
+        .upload-area > i {
+            font-size: 38px;
+            color: #2563eb;
+        }
+
+        .ms-preview {
+            display: block;
+            width: 100%;
+            max-height: 430px;
+            object-fit: contain;
+            background: #111827;
+            border-radius: 12px;
+            padding: 5px;
+        }
+
+        .result-card {
+            height: 100%;
+        }
+
+        .metric-box {
+            background: #f5f8fc;
+            border: 1px solid #e3e9f1;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .metric-label {
+            display: block;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .metric-value {
+            display: block;
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: #10243b;
+        }
+
+        .class-color {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 4px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .class-other {
+            background-color: #969696;
+        }
+
+        .class-built-up {
+            background-color: #dc3232;
+        }
+
+        .class-vegetation {
+            background-color: #28a046;
+        }
+
+        .class-water {
+            background-color: #2864dc;
+        }
+
+        .metadata-table td,
+        .metadata-table th {
+            padding: 10px;
+            overflow-wrap: anywhere;
+        }
+
+        .page-footer {
+            background: #10243b;
+            color: #cbd5e1;
+            padding: 20px;
+            text-align: center;
+        }
+
+        @media (max-width: 576px) {
+            .ms-panel {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark main-navbar">
+    <div class="container">
+
+        <a class="navbar-brand fw-bold"
+           href="{{ url_for('home') }}">
+            <i class="bi bi-globe-asia-australia"></i>
+            Satellite Intelligence
+        </a>
+
+        <button class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#mainNavbar">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="mainNavbar">
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link"
+                   href="{{ url_for('home') }}">Home</a>
+
+                <a class="nav-link active"
+                   href="{{ url_for('multispectral_home') }}">
+                    Multispectral
+                </a>
+
+                <a class="nav-link"
+                   href="{{ url_for('detection_page') }}">
+                    Detection
+                </a>
+
+                <a class="nav-link"
+                   href="{{ url_for('analytics_dashboard') }}">
+                    Analytics
+                </a>
+
+                <a class="nav-link"
+                   href="{{ url_for('reports_dashboard') }}">
+                    Reports
+                </a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<main class="ms-page">
+<div class="container">
+
+    <div class="mb-4">
+        <span class="badge text-bg-success">
+            PHASE 4 · MULTISPECTRAL AI
+        </span>
+
+        <h1 class="section-heading mt-3">
+            Multispectral Satellite Analysis
+        </h1>
+
+        <p class="text-muted">
+            Analyze multispectral imagery using RGB composites,
+            NDVI and trained U-Net land-cover classification.
+        </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="alert alert-success" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        {{ success }}
+    </div>
+    {% endif %}
+
+    <!-- UPLOAD -->
+    <section class="ms-panel mb-4">
+
+        <h3 class="section-heading">
+            <i class="bi bi-cloud-arrow-up me-2"></i>
+            Upload Multispectral GeoTIFF
+        </h3>
+
+        <p class="text-muted">
+            Upload a compatible GeoTIFF and specify its
+            spectral band positions.
+        </p>
+
+        <form method="POST"
+              action="{{ url_for('run_multispectral_visualization') }}"
+              enctype="multipart/form-data">
+
+            <div class="upload-area mb-4">
+                <i class="bi bi-file-earmark-image"></i>
+
+                <h5 class="mt-2">Choose a GeoTIFF</h5>
+
+                <p class="text-muted small">
+                    Supported formats: .tif and .tiff.
+                    The trained model expects Sentinel-2
+                    Red, Green, Blue and NIR bands.
+                </p>
+
+                <input type="file"
+                       class="form-control"
+                       name="multispectral_image"
+                       accept=".tif,.tiff"
+                       required>
+            </div>
+
+            <h5 class="section-heading mb-3">
+                Spectral Band Selection
+            </h5>
+
+            <div class="alert alert-info small">
+                Default order:
+                <strong>
+                    1 = B04 (Red),
+                    2 = B03 (Green),
+                    3 = B02 (Blue),
+                    4 = B08 (NIR).
+                </strong>
+                These are one-based indexes. Change them
+                if your GeoTIFF has another band order.
+            </div>
+
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <label for="red_band"
+                           class="form-label fw-semibold">
+                        Red Band (B04)
+                    </label>
+
+                    <input type="number"
+                           class="form-control"
+                           id="red_band"
+                           name="red_band"
+                           value="1"
+                           min="1"
+                           required>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="green_band"
+                           class="form-label fw-semibold">
+                        Green Band (B03)
+                    </label>
+
+                    <input type="number"
+                           class="form-control"
+                           id="green_band"
+                           name="green_band"
+                           value="2"
+                           min="1"
+                           required>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="blue_band"
+                           class="form-label fw-semibold">
+                        Blue Band (B02)
+                    </label>
+
+                    <input type="number"
+                           class="form-control"
+                           id="blue_band"
+                           name="blue_band"
+                           value="3"
+                           min="1"
+                           required>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="nir_band"
+                           class="form-label fw-semibold">
+                        Near Infrared (B08)
+                    </label>
+
+                    <input type="number"
+                           class="form-control"
+                           id="nir_band"
+                           name="nir_band"
+                           value="4"
+                           min="1"
+                           required>
+                </div>
+
+            </div>
+
+            <p class="text-muted small mt-3">
+                Use Sentinel-2-compatible reflectance data
+                with suitable projected spatial metadata.
+                Ordinary RGB photographs are not compatible.
+            </p>
+
+            <button type="submit"
+                    class="btn btn-success w-100 mt-3 py-2">
+                <i class="bi bi-cpu me-2"></i>
+                Run Multispectral AI Analysis
+            </button>
+
+        </form>
+    </section>
+
+    {% if result %}
+
+    {% set metadata = result.get('metadata', {}) %}
+    {% set ndvi = result.get('ndvi_result', {}) %}
+    {% set prediction = result.get('prediction', {}) %}
+    {% set statistics = result.get('class_statistics', {}) %}
+    {% set preview_url = result.get('prediction_preview_url') %}
+    {% set geotiff_url = result.get('prediction_geotiff_url') %}
+
+    <!-- METADATA -->
+    <section class="ms-panel mb-4">
+
+        <h3 class="section-heading">
+            Raster Information
+        </h3>
+
+        <p class="text-muted">
+            {{ result.get('filename', 'Unknown file') }}
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-bordered metadata-table">
+                <tbody>
+                    <tr>
+                        <th>Width</th>
+                        <td>{{ metadata.get('width', 'N/A') }}</td>
+
+                        <th>Height</th>
+                        <td>{{ metadata.get('height', 'N/A') }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Band Count</th>
+                        <td>{{ metadata.get('bands', 'N/A') }}</td>
+
+                        <th>CRS</th>
+                        <td>{{ metadata.get('crs', 'N/A') }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Resolution</th>
+                        <td>{{ metadata.get('resolution', 'N/A') }}</td>
+
+                        <th>Data Types</th>
+                        <td>{{ metadata.get('data_types', 'N/A') }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>NoData</th>
+                        <td>{{ metadata.get('nodata', 'N/A') }}</td>
+
+                        <th>Georeferenced</th>
+                        <td>
+                            {{ 'Yes' if metadata.get('georeferenced')
+                               else 'No' }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- SELECTED BANDS -->
+    <section class="ms-panel mb-4">
+
+        <h4 class="section-heading mb-3">
+            Selected Spectral Bands
+        </h4>
+
+        <div class="row g-3">
+
+            <div class="col-6 col-md-3">
+                <div class="metric-box">
+                    <span class="metric-label">Red</span>
+                    <span class="metric-value">
+                        {{ result.get('red_band', 1) }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="metric-box">
+                    <span class="metric-label">Green</span>
+                    <span class="metric-value">
+                        {{ result.get('green_band', 2) }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="metric-box">
+                    <span class="metric-label">Blue</span>
+                    <span class="metric-value">
+                        {{ result.get('blue_band', 3) }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="metric-box">
+                    <span class="metric-label">NIR</span>
+                    <span class="metric-value">
+                        {{ result.get('nir_band', 4) }}
+                    </span>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- RGB AND NDVI -->
+    <section class="row g-4 mb-4">
+
+        <div class="col-lg-6">
+            <div class="ms-panel result-card">
+
+                <h4 class="section-heading">
+                    RGB Composite
+                </h4>
+
+                <p class="text-muted small">
+                    Selected Red, Green and Blue bands.
+                </p>
+
+                {% if result.get('composite_filename') %}
+                <img class="ms-preview"
+                     src="{{ url_for(
+                         'multispectral_composite',
+                         filename=result.get('composite_filename')
+                     ) }}"
+                     alt="RGB composite"
+                     loading="lazy">
+                {% else %}
+                <div class="alert alert-warning">
+                    Composite unavailable.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="ms-panel result-card">
+
+                <h4 class="section-heading">
+                    NDVI Vegetation Index
+                </h4>
+
+                <p class="text-muted small">
+                    NDVI = (NIR - Red) / (NIR + Red).
+                </p>
+
+                {% set ndvi_filename =
+                    result.get('ndvi_preview_filename',
+                    result.get('ndvi_filename'))
+                %}
+
+                {% if ndvi_filename %}
+                <img class="ms-preview"
+                     src="{{ url_for(
+                         'multispectral_ndvi',
+                         filename=ndvi_filename
+                     ) }}"
+                     alt="NDVI visualization"
+                     loading="lazy">
+                {% else %}
+                <div class="alert alert-warning">
+                    NDVI preview unavailable.
+                </div>
+                {% endif %}
+
+                <div class="row g-2 mt-3">
+
+                    <div class="col-6">
+                        <div class="metric-box">
+                            <span class="metric-label">
+                                Mean NDVI
+                            </span>
+                            <span class="metric-value">
+                                {{ ndvi.get('mean', 'N/A') }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="col-6">
+                        <div class="metric-box">
+                            <span class="metric-label">
+                                Valid Pixels
+                            </span>
+                            <span class="metric-value">
+                                {{ ndvi.get('valid_pixels', 'N/A') }}
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- AI CLASSIFICATION -->
+    <section class="ms-panel mb-4">
+
+        <h3 class="section-heading">
+            <i class="bi bi-cpu me-2"></i>
+            AI Land-Cover Classification
+        </h3>
+
+        <p class="text-muted">
+            Four-class prediction from the trained
+            multispectral U-Net model.
+        </p>
+
+        {% if preview_url %}
+
+        <div class="row g-4">
+
+            <div class="col-lg-7">
+
+                <img class="ms-preview"
+                     src="{{ preview_url }}"
+                     alt="Multispectral classification map"
+                     loading="lazy">
+
+                <div class="d-flex flex-wrap gap-2 mt-3">
+
+                    <a href="{{ preview_url }}"
+                       download
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-image me-1"></i>
+                        Download PNG
+                    </a>
+
+                    {% if geotiff_url %}
+                    <a href="{{ geotiff_url }}"
+                       download
+                       class="btn btn-primary">
+                        <i class="bi bi-download me-1"></i>
+                        Download GeoTIFF
+                    </a>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+
+                <h5 class="fw-bold">
+                    Land-Cover Statistics
+                </h5>
+
+                <div class="table-responsive">
+                    <table class="table table-striped
+                                  table-bordered align-middle">
+
+                        <thead>
+                            <tr>
+                                <th>Class</th>
+                                <th>Pixels</th>
+                                <th>Area (m²)</th>
+                                <th>%</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for name in [
+                                'Other',
+                                'Built-up',
+                                'Vegetation',
+                                'Water'
+                            ] %}
+
+                            {% set stats =
+                                statistics.get(name, {})
+                            %}
+
+                            <tr>
+                                <td>
+                                    {% if name == 'Other' %}
+                                    <span class="class-color class-other"></span>
+
+                                    {% elif name == 'Built-up' %}
+                                    <span class="class-color class-built-up"></span>
+
+                                    {% elif name == 'Vegetation' %}
+                                    <span class="class-color class-vegetation"></span>
+
+                                    {% elif name == 'Water' %}
+                                    <span class="class-color class-water"></span>
+                                    {% endif %}
+
+                                    {{ name }}
+                                </td>
+
+                                <td>
+                                    {{ stats.get('pixels', 0) }}
+                                </td>
+
+                                <td>
+                                    {{ stats.get('area_m2', 'N/A') }}
+                                </td>
+
+                                <td>
+                                    {{ stats.get('percentage', 0) }}%
+                                </td>
+                            </tr>
+
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="text-muted small">
+                    Areas are calculated from the
+                    georeferenced pixel dimensions.
+                    Results are model predictions,
+                    not ground-truth measurements.
+                </p>
+
+                {% if prediction.get('valid_pixels') is not none %}
+                <div class="metric-box mt-3">
+                    <span class="metric-label">
+                        Valid Classified Pixels
+                    </span>
+
+                    <span class="metric-value">
+                        {{ prediction.get('valid_pixels') }}
+                    </span>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+
+        {% else %}
+
+        <div class="alert alert-warning">
+            No AI prediction is available.
+            Check the trained model checkpoint,
+            GeoTIFF format and Flask terminal.
+        </div>
+
+        {% endif %}
+    </section>
+
+    <!-- NEXT ACTIONS -->
+    <div class="d-flex flex-wrap gap-2">
+
+        <a href="{{ url_for('analytics_dashboard') }}"
+           class="btn btn-outline-primary">
+            <i class="bi bi-bar-chart-line me-1"></i>
+            View Analytics
+        </a>
+
+        <a href="{{ url_for('reports_dashboard') }}"
+           class="btn btn-outline-danger">
+            <i class="bi bi-file-earmark-pdf me-1"></i>
+            Generate PDF Report
+        </a>
+
+        <a href="{{ url_for('multispectral_home') }}"
+           class="btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i>
+            New Analysis
+        </a>
+
+    </div>
+
+    {% endif %}
+
+</div>
+</main>
+
+<footer class="page-footer">
+    Satellite Image Intelligence · Phase 4 Multispectral AI
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

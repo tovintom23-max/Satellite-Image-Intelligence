@@ -1,0 +1,27 @@
+
+Flask
+Pillow
+numpy
+opencv-python
+rasterio
+matplotlib
+pandas
+reportlab
+
+# Deep learning and AI
+torch
+torchvision
+ultralytics
+
+# Flask authentication and database
+Flask-Bcrypt
+mysql-connector-python
+
+# Environment configuration
+python-dotenv
+
+# AiTLAS
+# Install separately if your application still imports it.
+# aitlas==2.0.0
+
+reportlab

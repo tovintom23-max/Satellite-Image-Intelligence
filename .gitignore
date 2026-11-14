@@ -1,0 +1,58 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+service-account*.json
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# User uploads
+uploads/*
+!uploads/.gitkeep
+
+# Generated analysis results
+outputs/*
+!outputs/.gitkeep
+
+# Logs and local databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Trained checkpoints
+checkpoints/segmentation/*.pth
+checkpoints/segmentation/*.pt
+checkpoints/detection/*.pth
+checkpoints/detection/*.pt
+
+# Temporary files
+*.tmp
+*.bak
+
+# Large segmentation model checkpoint
+checkpoints/segmentation/checkpoint.pth.tar
+
+# Generated preview images
+previews/
+static/previews/
+
+# Local analytics history
+data/analytics_history.json
