@@ -1,4 +1,5 @@
-
+# Runtime dependencies for the Flask application (Python 3.12)
+# Versions are not pinned: validate in a clean environment before deployment.
 Flask
 Pillow
 numpy
@@ -7,22 +8,13 @@ rasterio
 matplotlib
 pandas
 reportlab
-
-# Deep learning and AI
 torch
 torchvision
 ultralytics
-
-# Flask authentication and database
-Flask-Bcrypt
-mysql-connector-python
-
-# Environment configuration
+segmentation-models-pytorch
 python-dotenv
 
-# AiTLAS
-# Install separately if your application still imports it.
+# Optional: install only if other project files actually use them.
+# Flask-Bcrypt
+# mysql-connector-python
 # aitlas==2.0.0
-
-reportlab
-egmentation-models-pytorch

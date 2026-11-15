@@ -1,53 +1,131 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Phase 5 | Aerial Object Detection</title>
+    <title>Phase 5 | Satellite Object Detection</title>
 
-    <!-- Bootstrap 5 -->
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
         rel="stylesheet"
     >
 
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        rel="stylesheet"
+    >
+
     <style>
+        :root {
+            --primary: #2563eb;
+            --dark: #10243d;
+            --muted: #64748b;
+            --background: #f4f7fb;
+        }
+
         body {
-            background: #f4f7fb;
+            background: var(--background);
             color: #172033;
+            min-height: 100vh;
         }
 
         .hero {
             background: linear-gradient(135deg, #10243d, #1d5274);
-            color: white;
-            border-radius: 22px;
+            color: #fff;
+            border-radius: 20px;
         }
 
         .panel {
-            border: 0;
+            border: 1px solid #e8edf4;
             border-radius: 18px;
-            box-shadow: 0 8px 28px rgba(20, 40, 70, 0.08);
+            box-shadow: 0 8px 28px rgba(20, 40, 70, 0.06);
         }
 
-        .preview {
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .image-preview {
             width: 100%;
-            max-height: 560px;
+            max-height: 550px;
             object-fit: contain;
             background: #e9eef5;
             border-radius: 12px;
         }
 
         .metric {
-            background: #f0f5fa;
-            border-radius: 14px;
-            padding: 16px;
             height: 100%;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #e8edf4;
+            border-radius: 15px;
         }
 
-        .muted {
-            color: #64748b;
+        .metric-value {
+            font-size: 1.9rem;
+            font-weight: 750;
+            color: var(--dark);
+            overflow-wrap: anywhere;
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .upload-preview {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .table th {
+            color: #475569;
+            font-size: 0.9rem;
+        }
+
+        .confidence-value {
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        .loading {
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .result-image-container {
+            background: #eef2f7;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        @media (max-width: 576px) {
+            .hero {
+                border-radius: 14px;
+            }
+
+            .metric-value {
+                font-size: 1.5rem;
+            }
         }
     </style>
 </head>
@@ -56,200 +134,362 @@
 
 <main class="container py-4 py-lg-5">
 
-    <!-- Page Header -->
+    <!-- HEADER -->
+
     <section class="hero p-4 p-lg-5 mb-4">
 
-        <span class="badge text-bg-info mb-3">
-            PHASE 5 · OBJECT DETECTION
-        </span>
+        <div class="mb-3">
+            <span class="badge text-bg-info">
+                PHASE 5 · OBJECT DETECTION
+            </span>
+        </div>
 
         <h1 class="display-6 fw-bold">
-            Aerial Object Detection
+            <i class="bi bi-bounding-box-circles me-2"></i>
+            Satellite Object Detection
         </h1>
 
-        <p class="mb-0">
-            Detect and count the 15 DOTA v1.0 aerial object classes
-            using an oriented-bounding-box model.
+        <p class="mb-0 opacity-75">
+            Detect, classify, and count objects in aerial and
+            satellite images using a trained YOLO
+            Oriented Bounding Box (OBB) model.
         </p>
 
     </section>
 
 
-    <!-- Error Message -->
+    <!-- NAVIGATION -->
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="bi bi-house"></i>
+            Home
+        </a>
+
+        <a href="/multispectral"
+           class="btn btn-outline-secondary">
+            <i class="bi bi-layers"></i>
+            Multispectral Analysis
+        </a>
+
+        <a href="/analytics"
+           class="btn btn-outline-secondary">
+            <i class="bi bi-bar-chart"></i>
+            Analytics
+        </a>
+
+        <a href="/reports"
+           class="btn btn-outline-secondary">
+            <i class="bi bi-file-earmark-pdf"></i>
+            Reports
+        </a>
+
+    </div>
+
+
+    <!-- ERROR MESSAGES -->
+
     {% if error %}
 
-    <div class="alert alert-danger">
+    <div class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>
         {{ error }}
     </div>
 
     {% endif %}
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
 
-    <!-- Image Upload Section -->
+        {% for category, message in messages %}
+
+        <div class="alert alert-{{ category if category in ['success', 'danger', 'warning', 'info'] else 'info' }}"
+             role="alert">
+            {{ message }}
+        </div>
+
+        {% endfor %}
+
+    {% endwith %}
+
+
+    <!-- UPLOAD PANEL -->
+
     <section class="card panel mb-4">
 
         <div class="card-body p-4">
 
-            <h2 class="h4 mb-3">
-                Upload an RGB satellite or aerial image
+            <h2 class="section-title mb-3">
+                <i class="bi bi-cloud-arrow-up me-2"></i>
+                Upload Satellite Image
             </h2>
 
-            <form method="POST" enctype="multipart/form-data">
+            <p class="muted">
+                Select an RGB satellite or aerial image to run
+                object detection using your trained checkpoint.
+            </p>
 
-                <div class="mb-3">
+            <!-- Keep POST to the current page for
+                 compatibility with the existing Flask route. -->
+
+            <form
+                id="detectionForm"
+                method="POST"
+                enctype="multipart/form-data"
+            >
+
+                <div class="mb-4">
 
                     <label
                         for="detection_image"
                         class="form-label fw-semibold"
                     >
-                        Image file
+                        Satellite Image
                     </label>
 
                     <input
+                        type="file"
                         class="form-control"
                         id="detection_image"
                         name="detection_image"
-                        type="file"
                         accept=".jpg,.jpeg,.png"
                         required
                     >
 
                     <div class="form-text">
-                        Supported formats: JPG, JPEG and PNG.
-                        GeoTIFF multispectral input is handled separately
-                        in Phase 4.
+                        Supported: JPG, JPEG, PNG.
+                        For large images, use a smaller tile.
+                        Multispectral GeoTIFF analysis is
+                        available separately in Phase 4.
                     </div>
 
                 </div>
 
 
-                <!-- Confidence Threshold -->
-                <div class="mb-3">
+                <!-- LOCAL IMAGE PREVIEW -->
+
+                <div
+                    id="uploadPreviewContainer"
+                    class="mb-4 d-none"
+                >
+
+                    <h3 class="h6 fw-semibold">
+                        Selected Image Preview
+                    </h3>
+
+                    <img
+                        id="uploadPreview"
+                        class="upload-preview"
+                        alt="Selected satellite image preview"
+                    >
+
+                    <p
+                        id="selectedFileName"
+                        class="small muted mt-2 mb-0"
+                    ></p>
+
+                </div>
+
+
+                <!-- CONFIDENCE -->
+
+                <div class="mb-4">
 
                     <label
                         for="confidence"
                         class="form-label fw-semibold"
                     >
-                        Confidence threshold
+                        Detection Confidence
                     </label>
 
                     <select
-                        class="form-select"
                         id="confidence"
                         name="confidence"
+                        class="form-select"
                     >
 
                         <option value="0.15">
-                            0.15 · More detections, more possible false positives
+                            15% — More detections
                         </option>
 
                         <option value="0.25" selected>
-                            0.25 · Recommended starting point
+                            25% — Recommended
                         </option>
 
                         <option value="0.40">
-                            0.40 · More conservative
+                            40% — Conservative
                         </option>
 
                         <option value="0.50">
-                            0.50 · High confidence only
+                            50% — High confidence
                         </option>
 
                     </select>
 
+                    <div class="form-text">
+                        Lower thresholds may detect more objects
+                        but can increase false positives.
+                    </div>
+
                 </div>
 
 
+                <!-- SUBMIT -->
+
                 <button
-                    class="btn btn-primary btn-lg"
+                    id="detectButton"
                     type="submit"
+                    class="btn btn-primary btn-lg"
                 >
-                    Run object detection
+                    <i class="bi bi-search me-2"></i>
+                    Run Object Detection
                 </button>
 
             </form>
+
+
+            <!-- LOADING INDICATOR -->
+
+            <div
+                id="loadingIndicator"
+                class="loading mt-4"
+                role="status"
+                aria-live="polite"
+            >
+
+                <div class="d-flex align-items-center gap-3">
+
+                    <div
+                        class="spinner-border text-primary"
+                        aria-hidden="true"
+                    ></div>
+
+                    <div>
+                        <strong>Analyzing satellite image...</strong>
+
+                        <div class="small muted">
+                            Running YOLO OBB inference.
+                            Processing time depends on image size.
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
 
         </div>
 
     </section>
 
 
-    <!-- Detection Results -->
+    <!-- RESULTS -->
+
     {% if result %}
 
-    <section class="card panel mb-4">
+    <section class="card panel mb-4" id="detectionResults">
 
         <div class="card-body p-4">
 
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div
+                class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"
+            >
 
                 <div>
 
-                    <h2 class="h4 mb-1">
-                        Detection results
+                    <h2 class="section-title mb-1">
+                        <i class="bi bi-image me-2"></i>
+                        Detection Results
                     </h2>
 
-                    <div class="muted small">
-                        {{ result.original_filename }}
+                    <p class="small muted mb-0">
+                        {{ result.original_filename|default('Uploaded image') }}
                         ·
-                        {{ result.image_width }} × {{ result.image_height }}
-                    </div>
+                        {{ result.image_width }} ×
+                        {{ result.image_height }} pixels
+                    </p>
 
                 </div>
 
-                <span class="badge text-bg-success">
-                    {{ result.total_detections }} objects detected
+                <span class="badge text-bg-success fs-6">
+                    {{ result.total_detections }}
+                    objects detected
                 </span>
 
             </div>
 
 
-            <!-- Annotated Image -->
-            <img
-                class="preview"
-                src="{{ result.annotated_url }}"
-                alt="Image annotated with oriented detection boxes"
-            >
+            <!-- ANNOTATED IMAGE -->
 
+            {% if result.annotated_url %}
 
-            <!-- Image Actions -->
-            <div class="mt-3">
+            <div class="result-image-container">
 
-                <a
-                    class="btn btn-outline-primary"
-                    href="{{ result.annotated_url }}"
-                    download
+                <img
+                    src="{{ result.annotated_url }}"
+                    class="image-preview"
+                    alt="Satellite image with oriented bounding boxes"
                 >
-                    Download annotated image
-                </a>
-
-                <a
-                    class="btn btn-outline-secondary"
-                    href="{{ result.original_url }}"
-                    target="_blank"
-                >
-                    View original image
-                </a>
 
             </div>
+
+
+            <!-- DOWNLOAD ACTIONS -->
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+
+                <a
+                    href="{{ result.annotated_url }}"
+                    class="btn btn-outline-primary"
+                    download
+                >
+                    <i class="bi bi-download me-1"></i>
+                    Download Annotated Image
+                </a>
+
+                {% if result.original_url %}
+
+                <a
+                    href="{{ result.original_url }}"
+                    class="btn btn-outline-secondary"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    <i class="bi bi-image me-1"></i>
+                    View Original Image
+                </a>
+
+                {% endif %}
+
+            </div>
+
+            {% else %}
+
+            <div class="alert alert-warning">
+                Detection statistics are available,
+                but the annotated image URL was not supplied
+                by the Flask backend.
+            </div>
+
+            {% endif %}
 
         </div>
 
     </section>
 
 
-    <!-- Detection Metrics -->
+    <!-- METRICS -->
+
     <section class="row g-3 mb-4">
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg-3">
 
             <div class="metric">
 
-                <div class="muted small">
-                    Total detections
+                <div class="metric-label">
+                    Total Objects
                 </div>
 
-                <div class="display-6 fw-bold">
+                <div class="metric-value">
                     {{ result.total_detections }}
                 </div>
 
@@ -257,16 +497,15 @@
 
         </div>
 
-
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg-3">
 
             <div class="metric">
 
-                <div class="muted small">
-                    Confidence threshold
+                <div class="metric-label">
+                    Confidence Threshold
                 </div>
 
-                <div class="display-6 fw-bold">
+                <div class="metric-value">
                     {{ (result.confidence_threshold * 100)|round|int }}%
                 </div>
 
@@ -274,35 +513,37 @@
 
         </div>
 
-
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg-3">
 
             <div class="metric">
 
-                <div class="muted small">
-                    Image width
+                <div class="metric-label">
+                    Image Width
                 </div>
 
-                <div class="display-6 fw-bold">
+                <div class="metric-value">
                     {{ result.image_width }}
                 </div>
+
+                <div class="small muted">pixels</div>
 
             </div>
 
         </div>
 
-
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg-3">
 
             <div class="metric">
 
-                <div class="muted small">
-                    Image height
+                <div class="metric-label">
+                    Image Height
                 </div>
 
-                <div class="display-6 fw-bold">
+                <div class="metric-value">
                     {{ result.image_height }}
                 </div>
+
+                <div class="small muted">pixels</div>
 
             </div>
 
@@ -311,13 +552,15 @@
     </section>
 
 
-    <!-- Object Counts by Class -->
+    <!-- CLASS STATISTICS -->
+
     <section class="card panel mb-4">
 
         <div class="card-body p-4">
 
-            <h2 class="h4 mb-3">
-                Object counts by class
+            <h2 class="section-title mb-3">
+                <i class="bi bi-bar-chart me-2"></i>
+                Detected Object Classes
             </h2>
 
             {% if result.class_counts %}
@@ -327,12 +570,10 @@
                 <table class="table table-hover align-middle">
 
                     <thead>
-
                         <tr>
-                            <th>Class</th>
+                            <th>Object Class</th>
                             <th class="text-end">Count</th>
                         </tr>
-
                     </thead>
 
                     <tbody>
@@ -342,7 +583,7 @@
                         <tr>
 
                             <td>
-                                {{ class_name|title }}
+                                {{ class_name|replace('-', ' ')|title }}
                             </td>
 
                             <td class="text-end fw-semibold">
@@ -361,9 +602,10 @@
 
             {% else %}
 
-            <p class="muted mb-0">
-                No objects passed the selected confidence threshold.
-            </p>
+            <div class="alert alert-info mb-0">
+                No objects exceeded the selected
+                confidence threshold.
+            </div>
 
             {% endif %}
 
@@ -372,27 +614,30 @@
     </section>
 
 
-    <!-- Individual Detections -->
-    <section class="card panel">
+    <!-- INDIVIDUAL DETECTIONS -->
+
+    <section class="card panel mb-4">
 
         <div class="card-body p-4">
 
-            <h2 class="h4 mb-3">
-                Individual detections
+            <h2 class="section-title mb-3">
+                <i class="bi bi-list-check me-2"></i>
+                Individual Detections
             </h2>
 
             {% if result.detections %}
 
             <div class="table-responsive">
 
-                <table class="table table-sm table-striped align-middle">
+                <table class="table table-striped table-hover align-middle">
 
                     <thead>
 
                         <tr>
                             <th>#</th>
-                            <th>Object class</th>
+                            <th>Object Class</th>
                             <th>Confidence</th>
+                            <th>Bounding Box</th>
                         </tr>
 
                     </thead>
@@ -408,11 +653,19 @@
                             </td>
 
                             <td>
-                                {{ item.class_name|title }}
+                                {{ item.class_name|replace('-', ' ')|title }}
                             </td>
 
                             <td>
-                                {{ item.confidence_percent }}%
+                                <span class="confidence-value">
+                                    {{ item.confidence_percent }}%
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="badge text-bg-secondary">
+                                    Oriented
+                                </span>
                             </td>
 
                         </tr>
@@ -428,7 +681,7 @@
             {% else %}
 
             <p class="muted mb-0">
-                No objects detected in this image.
+                No individual detections were returned.
             </p>
 
             {% endif %}
@@ -437,28 +690,151 @@
 
     </section>
 
+
+    <!-- MODEL INFORMATION -->
+
+    <section class="card panel mb-4">
+
+        <div class="card-body p-4">
+
+            <h2 class="section-title mb-3">
+                <i class="bi bi-cpu me-2"></i>
+                Model Information
+            </h2>
+
+            <div class="row g-3">
+
+                <div class="col-md-6">
+
+                    <div class="small muted">Model</div>
+
+                    <strong>
+                        {{ result.model_name|default('YOLO OBB') }}
+                    </strong>
+
+                </div>
+
+                <div class="col-md-6">
+
+                    <div class="small muted">Detection Type</div>
+
+                    <strong>
+                        Oriented Bounding Boxes (OBB)
+                    </strong>
+
+                </div>
+
+            </div>
+
+            <p class="small muted mt-3 mb-0">
+                Results depend on the trained classes,
+                image resolution, confidence threshold,
+                and similarity to the training dataset.
+                Detection counts are model predictions,
+                not independently verified ground truth.
+            </p>
+
+        </div>
+
+    </section>
+
     {% endif %}
 
 
-    <!-- Model Information -->
-    <p class="small muted mt-4 mb-0">
+    <!-- FOOTER -->
 
-        Model: YOLO26n-OBB fine-tuned on DOTA v1.0.
-        Results depend on image resolution, scene similarity,
-        and the trained checkpoint.
+    <div class="text-center mt-4">
 
-    </p>
+        <p class="small muted mb-2">
+            Satellite Image Intelligence · Phase 5
+        </p>
 
+        <a href="/" class="btn btn-link">
+            <i class="bi bi-arrow-left me-1"></i>
+            Back to Main Application
+        </a>
 
-    <!-- Back to Main Application -->
-    <a
-        href="/"
-        class="btn btn-link px-0 mt-2"
-    >
-        ← Back to main application
-    </a>
+    </div>
 
 </main>
+
+
+<!-- JAVASCRIPT -->
+
+<script>
+    const imageInput = document.getElementById("detection_image");
+    const previewContainer = document.getElementById(
+        "uploadPreviewContainer"
+    );
+    const previewImage = document.getElementById("uploadPreview");
+    const selectedFileName = document.getElementById(
+        "selectedFileName"
+    );
+
+    const detectionForm = document.getElementById("detectionForm");
+    const detectButton = document.getElementById("detectButton");
+    const loadingIndicator = document.getElementById(
+        "loadingIndicator"
+    );
+
+    let previewUrl = null;
+
+    imageInput.addEventListener("change", function () {
+        const file = this.files[0];
+
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = null;
+        }
+
+        if (!file) {
+            previewContainer.classList.add("d-none");
+            previewImage.removeAttribute("src");
+            return;
+        }
+
+        const allowedExtensions = [".jpg", ".jpeg", ".png"];
+        const filename = file.name.toLowerCase();
+
+        const validExtension = allowedExtensions.some(
+            extension => filename.endsWith(extension)
+        );
+
+        if (!validExtension) {
+            alert("Please select a JPG, JPEG or PNG image.");
+            this.value = "";
+            previewContainer.classList.add("d-none");
+            previewImage.removeAttribute("src");
+            return;
+        }
+
+        previewUrl = URL.createObjectURL(file);
+
+        previewImage.src = previewUrl;
+
+        selectedFileName.textContent =
+            file.name + " (" +
+            (file.size / (1024 * 1024)).toFixed(2) +
+            " MB)";
+
+        previewContainer.classList.remove("d-none");
+    });
+
+    detectionForm.addEventListener("submit", function (event) {
+        if (!imageInput.files.length) {
+            event.preventDefault();
+            alert("Please select a satellite image.");
+            return;
+        }
+
+        detectButton.disabled = true;
+        detectButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2" ' +
+            'aria-hidden="true"></span>Processing...';
+
+        loadingIndicator.classList.add("active");
+    });
+</script>
 
 </body>
 </html>

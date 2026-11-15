@@ -1048,3 +1048,62 @@ img {
 .navbar.main-navbar .navbar-toggler-icon {
     filter: brightness(0) invert(1);
 }
+
+/* Phase 8.3: Homepage polish and upload-state fixes */
+[hidden] { display: none !important; }
+.selected-file:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.selected-file #fileName { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.remove-button {
+    border: 0;
+    background: transparent;
+    color: #176b43;
+    padding: 4px 8px;
+    border-radius: 8px;
+}
+.remove-button:hover, .remove-button:focus-visible { background: #d8efdf; }
+.client-preview:not([hidden]) { display: block; }
+.upload-dropzone:focus-visible, .btn:focus-visible, .remove-button:focus-visible {
+    outline: 3px solid #7bd6a1;
+    outline-offset: 3px;
+}
+.upload-dropzone.dragover { background: #e4f5eb; border-color: #176b43; }
+.upload-dropzone.is-invalid { border-color: #a12c25; background: #fff5f3; }
+.upload-loading { color: #176b43; font-weight: 600; text-align: center; }
+.analysis-section { padding: 65px 0; }
+.result-card {
+    padding: 28px;
+    background: #fff;
+    border: 1px solid #e1ebe5;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(20,65,45,.07);
+}
+.success-heading { display: flex; align-items: center; gap: 12px; color: #176b43; }
+.success-heading i { font-size: 26px; }
+.metadata-box {
+    height: 100%; padding: 22px;
+    background: #f8fbf9;
+    border: 1px solid #e0ebe4;
+    border-radius: 12px;
+    overflow-wrap: anywhere;
+}
+.result-preview { width: 100%; max-height: 350px; object-fit: contain; border-radius: 8px; }
+.main-navbar .navbar-nav .nav-link { margin-left: 0; padding: 9px 12px; border-radius: 8px; }
+.main-navbar .navbar-nav .nav-link:hover { background: rgba(255,255,255,.08); }
+@media (max-width: 991px) {
+    .main-navbar .navbar-collapse { border-top: 1px solid rgba(255,255,255,.15); margin-top: 12px; }
+    .main-navbar .navbar-nav .nav-link { display: block; }
+}
+@media (max-width: 576px) {
+    .upload-card { padding: 20px 15px; }
+    .upload-dropzone { padding: 22px 12px; }
+    .result-card { padding: 18px; }
+    .success-heading { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .feature-card, .result-image-card, .btn-download, .btn-back { transition: none; }
+}

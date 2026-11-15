@@ -207,3 +207,5 @@ static/previews/
 # Local segmentation test images
 /test_satellite.png
 /test_satellite_fixed.png
+# Keep documentation screenshots when deliberately added.
+# Avoid committing private imagery in screenshots.

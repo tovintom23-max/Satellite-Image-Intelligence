@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from pathlib import Path
 
@@ -22,7 +23,11 @@ from flask import (
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge, HTTPException
 
-from config import MAX_CONTENT_LENGTH
+from config import (
+    MAX_CONTENT_LENGTH, MAX_IMAGE_DIMENSION, FLASK_DEBUG,
+    RGB_EXTENSIONS as CONFIG_RGB_EXTENSIONS,
+    TIFF_EXTENSIONS as CONFIG_TIFF_EXTENSIONS,
+)
 
 from models.segmentation import segment_image
 
@@ -130,6 +135,12 @@ for folder in REQUIRED_FOLDERS:
 app = Flask(__name__)
 
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+app.config["MAX_IMAGE_DIMENSION"] = MAX_IMAGE_DIMENSION
+app.config["DEBUG"] = FLASK_DEBUG
+app.config["MAX_FORM_MEMORY_SIZE"] = 500_000
+app.config["MAX_FORM_PARTS"] = 20
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 app.config["RGB_UPLOAD_FOLDER"] = str(
     RGB_UPLOAD_FOLDER
@@ -148,6 +159,14 @@ app.config["REPORT_FOLDER"] = str(
 )
 
 logging.basicConfig(level=logging.INFO)
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
 
 
 # ==========================================================
@@ -176,8 +195,38 @@ def safely_record_event(event_type, filename, details=None):
 # 4. FILE VALIDATION HELPERS
 # ==========================================================
 
-RGB_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
-TIFF_EXTENSIONS = {"tif", "tiff"}
+RGB_EXTENSIONS = set(CONFIG_RGB_EXTENSIONS)
+TIFF_EXTENSIONS = set(CONFIG_TIFF_EXTENSIONS)
+
+# A conservative pixel budget protects the 8 GB development machine.
+# A high per-side dimension limit alone is insufficient against huge rasters.
+MAX_RGB_PIXELS = 40_000_000
+MAX_RASTER_PIXELS = 25_000_000
+MAX_RASTER_BANDS = 16
+
+
+def check_image_dimensions(width, height, *, raster=False, bands=1):
+    if width < 1 or height < 1:
+        raise ValueError("Invalid image dimensions.")
+    if max(width, height) > app.config["MAX_IMAGE_DIMENSION"]:
+        raise ValueError(
+            f"Image dimensions exceed the configured limit of "
+            f"{app.config['MAX_IMAGE_DIMENSION']} pixels per side."
+        )
+    limit = MAX_RASTER_PIXELS if raster else MAX_RGB_PIXELS
+    if width * height > limit:
+        raise ValueError(f"Image has too many pixels (limit: {limit:,}).")
+    if raster and (bands < 1 or bands > MAX_RASTER_BANDS):
+        raise ValueError(f"Raster must have 1 to {MAX_RASTER_BANDS} bands.")
+
+
+def validate_served_name(filename, extensions, prefix=None):
+    safe = secure_filename(filename)
+    if (not safe or safe != filename or
+            Path(safe).suffix.lower() not in extensions or
+            (prefix is not None and not safe.startswith(prefix))):
+        abort(404)
+    return safe
 
 
 def get_extension(filename):
@@ -202,6 +251,7 @@ def validate_rgb_image(image_path):
     """
     try:
         with Image.open(image_path) as image:
+            check_image_dimensions(image.width, image.height)
             detected_format = image.format
             if detected_format not in ("JPEG", "PNG", "WEBP"):
                 raise ValueError(
@@ -227,8 +277,7 @@ def normalize_rgb_image(source_path, destination_path):
         raise ValueError("Source and destination must be different files.")
     try:
         with Image.open(source_path) as image:
-            if image.width < 1 or image.height < 1:
-                raise ValueError("Invalid image dimensions.")
+            check_image_dimensions(image.width, image.height)
             rgb = image.convert("RGB")
             rgb.save(destination_path, format="PNG")
             return {"width": rgb.width, "height": rgb.height,
@@ -248,10 +297,9 @@ def validate_tiff(image_path):
                     "The raster contains no bands."
                 )
 
-            if dataset.width < 1 or dataset.height < 1:
-                raise ValueError(
-                    "Invalid raster dimensions."
-                )
+            check_image_dimensions(
+                dataset.width, dataset.height, raster=True, bands=dataset.count
+            )
 
             return {
                 "width": dataset.width,
@@ -285,6 +333,7 @@ def raster_to_rgb(image_path, max_size=1200):
 
         width = dataset.width
         height = dataset.height
+        check_image_dimensions(width, height, raster=True, bands=dataset.count)
 
         scale = min(
             1.0,
@@ -370,6 +419,7 @@ def raster_to_rgb(image_path, max_size=1200):
 def create_rgb_preview(image_path, preview_path):
 
     with Image.open(image_path) as image:
+        check_image_dimensions(image.width, image.height)
         image.thumbnail(
             (1200, 1200),
             Image.Resampling.LANCZOS,
@@ -409,6 +459,7 @@ def create_processing_copy(
     with Image.open(image_path) as image:
 
         original_width, original_height = image.size
+        check_image_dimensions(original_width, original_height)
 
         image = image.convert("RGB")
 
@@ -860,6 +911,8 @@ def run_multispectral_visualization():
 
     try:
         file.save(str(image_path))
+        if image_path.stat().st_size == 0:
+            raise ValueError("The uploaded GeoTIFF is empty.")
 
         metadata = validate_tiff(image_path)
 
@@ -1119,171 +1172,142 @@ def run_multispectral_visualization():
 # 13. PHASE 5 OBJECT DETECTION
 # ==========================================================
 
-@app.route(
-    "/detection",
-    methods=["GET", "POST"],
-)
+# Detection uses the same RGB formats offered by detection.html.
+# Multispectral GeoTIFF analysis remains in Phase 4.
+DETECTION_EXTENSIONS = {"jpg", "jpeg", "png"}
+
+
+@app.route("/detection", methods=["GET", "POST"])
 def detection_page():
+    """Upload an RGB image, run YOLO OBB, and render Phase 5 results.
 
+    Preserve the existing template contract:
+      POST field: detection_image
+      POST field: confidence
+      result.annotated_url / result.original_url
+    """
     if request.method == "GET":
-        return render_template(
-            "detection.html"
-        )
+        return render_template("detection.html")
 
-    if "detection_image" not in request.files:
+    file = request.files.get("detection_image")
+    if file is None or not file.filename:
         return render_template(
-            "detection.html",
-            error="Please choose an image.",
-        ), 400
-
-    file = request.files["detection_image"]
-
-    if not file.filename:
-        return render_template(
-            "detection.html",
-            error="No file was selected.",
+            "detection.html", error="Please select an image."
         ), 400
 
     original_name = secure_filename(file.filename)
-
-    if not original_name or not allowed_rgb_file(
-        original_name
-    ):
+    extension = get_extension(original_name)
+    if not original_name or extension not in DETECTION_EXTENSIONS:
         return render_template(
             "detection.html",
-            error=(
-                "Object detection accepts JPG, "
-                "JPEG and PNG images."
-            ),
+            error="Object detection accepts JPG, JPEG and PNG images.",
         ), 400
 
-    stored_name = (
-        f"{uuid.uuid4().hex}."
-        f"{get_extension(original_name)}"
-    )
+    # Check confidence before writing an uploaded file to disk.
+    try:
+        confidence = float(request.form.get("confidence", "0.25"))
+        if not np.isfinite(confidence) or not 0.0 < confidence <= 1.0:
+            raise ValueError("Confidence must be greater than 0 and at most 1.")
+    except (TypeError, ValueError) as error:
+        return render_template(
+            "detection.html", error=f"Invalid confidence threshold: {error}"
+        ), 400
 
-    image_path = (
-        DETECTION_UPLOAD_FOLDER / stored_name
-    )
+    # Convert accepted JPEG/PNG uploads into a consistent RGB PNG.
+    # This also prevents a file with a misleading extension being sent
+    # directly to the YOLO inference pipeline.
+    token = uuid.uuid4().hex
+    incoming_path = DETECTION_UPLOAD_FOLDER / f"incoming_{token}.{extension}"
+    stored_name = f"{token}.png"
+    image_path = DETECTION_UPLOAD_FOLDER / stored_name
 
     try:
-        file.save(str(image_path))
+        file.save(str(incoming_path))
+        if incoming_path.stat().st_size == 0:
+            raise ValueError("The uploaded image is empty.")
 
-        validate_rgb_image(image_path)
+        detected_format = validate_rgb_image(incoming_path)
+        if detected_format not in {"JPEG", "PNG"}:
+            raise ValueError("Object detection accepts JPEG or PNG image content.")
 
-        safely_record_event(
-            "upload",
-            stored_name,
-            {
-                "original_filename": original_name,
-                "image_type": "Object Detection Image",
-            },
-        )
+        normalize_rgb_image(incoming_path, image_path)
 
-        confidence = request.form.get(
-            "confidence",
-            "0.25",
-            type=float,
-        )
-
-        if confidence is None:
-            confidence = 0.25
-
-        if not 0.05 <= confidence <= 0.95:
-            raise ValueError(
-                "Confidence must be between 0.05 and 0.95."
-            )
-
+        # CPU-friendly default for an 8 GB RAM laptop. A trained OBB
+        # model may benefit from 1024 for small aerial objects, but
+        # 640 is a safer first integration test.
         result = detect_objects(
             str(image_path),
             str(DETECTION_RESULT_FOLDER),
             confidence=confidence,
-            image_size=1024,
+            image_size=640,
         )
+
+        annotated_name = secure_filename(result["annotated_filename"])
+        if annotated_name != result["annotated_filename"]:
+            raise RuntimeError("Invalid annotated output filename.")
+        if not (DETECTION_RESULT_FOLDER / annotated_name).is_file():
+            raise RuntimeError("Object detection did not save an annotated image.")
 
         result["original_filename"] = original_name
         result["stored_filename"] = stored_name
-
         result["annotated_url"] = url_for(
-            "detection_output",
-            filename=result["annotated_filename"],
+            "detection_output", filename=annotated_name
         )
-
         result["original_url"] = url_for(
-            "detection_upload",
-            filename=stored_name,
+            "detection_upload", filename=stored_name
         )
 
-        # Phase 7: Store full detection report data.
-
+        # Preserve the analytics schema and relative paths consumed by
+        # the existing Phase 6 dashboard and Phase 7 PDF report generator.
         safely_record_event(
-            "detection",
-            stored_name,
+            "upload", stored_name,
             {
                 "original_filename": original_name,
-                "class_counts": result.get(
-                    "class_counts",
-                    {},
-                ),
-                "total_detections": result.get(
-                    "total_detections",
-                    0,
-                ),
+                "image_type": "Object Detection Image",
+                "stored_format": "PNG",
+            },
+        )
+        event = safely_record_event(
+            "detection", stored_name,
+            {
+                "original_filename": original_name,
+                "class_counts": result.get("class_counts", {}),
+                "total_detections": result.get("total_detections", 0),
                 "confidence_threshold": confidence,
-                "image_width": result.get(
-                    "image_width"
-                ),
-                "image_height": result.get(
-                    "image_height"
-                ),
-                "detections": result.get(
-                    "detections",
-                    [],
-                ),
-                "original_image": (
-                    f"uploads/detection/{stored_name}"
-                ),
+                "image_width": result.get("image_width"),
+                "image_height": result.get("image_height"),
+                "detections": result.get("detections", []),
+                "model_name": result.get("model_name", "YOLO OBB"),
+                "original_image": f"uploads/detection/{stored_name}",
                 "annotated_image": (
-                    "outputs/detection/results/"
-                    + result["annotated_filename"]
+                    f"outputs/detection/results/{annotated_name}"
                 ),
             },
         )
-
-        return render_template(
-            "detection.html",
-            result=result,
+        result["report_event_id"] = (
+            event.get("id") if isinstance(event, dict) else None
         )
 
-    except (
-        ValueError,
-        OSError,
-        FileNotFoundError,
-    ) as error:
+        return render_template("detection.html", result=result)
 
-        app.logger.warning(
-            "Object detection request error: %s",
-            error,
-        )
-
-        return render_template(
-            "detection.html",
-            error=str(error),
-        ), 400
+    except (ValueError, OSError) as error:
+        image_path.unlink(missing_ok=True)
+        app.logger.warning("Detection input rejected (%s): %s", original_name, error)
+        return render_template("detection.html", error=str(error)), 400
 
     except Exception:
-
-        app.logger.exception(
-            "Object detection failed."
-        )
-
+        image_path.unlink(missing_ok=True)
+        app.logger.exception("Phase 5 object detection failed.")
         return render_template(
             "detection.html",
             error=(
-                "Object detection failed. "
-                "Check the checkpoint and terminal."
+                "Object detection failed. Verify checkpoints/detection/best.pt "
+                "and check the Flask terminal for details."
             ),
         ), 500
+
+    finally:
+        incoming_path.unlink(missing_ok=True)
 
 
 # ==========================================================
@@ -1293,10 +1317,7 @@ def detection_page():
 @app.route("/previews/<filename>")
 def uploaded_preview(filename):
 
-    filename = secure_filename(filename)
-
-    if not filename.startswith("preview_"):
-        abort(404)
+    filename = validate_served_name(filename, {".png"}, prefix="preview_")
 
     return send_from_directory(
         PREVIEW_FOLDER,
@@ -1309,7 +1330,7 @@ def uploaded_rgb_image(filename):
 
     return send_from_directory(
         RGB_UPLOAD_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png", ".jpg", ".jpeg", ".webp"}),
     )
 
 
@@ -1318,7 +1339,7 @@ def uploaded_multispectral_image(filename):
 
     return send_from_directory(
         MULTISPECTRAL_UPLOAD_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".tif", ".tiff"}),
     )
 
 
@@ -1327,7 +1348,7 @@ def detection_upload(filename):
 
     return send_from_directory(
         DETECTION_UPLOAD_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png", ".jpg", ".jpeg"}),
     )
 
 
@@ -1338,7 +1359,7 @@ def segmentation_mask(filename):
 
     return send_from_directory(
         MASK_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png"}),
     )
 
 
@@ -1349,7 +1370,7 @@ def segmentation_overlay(filename):
 
     return send_from_directory(
         OVERLAY_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png"}),
     )
 
 
@@ -1360,7 +1381,7 @@ def multispectral_composite(filename):
 
     return send_from_directory(
         COMPOSITE_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png"}),
     )
 
 
@@ -1371,14 +1392,14 @@ def multispectral_ndvi(filename):
 
     return send_from_directory(
         NDVI_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png"}),
     )
 
 
 @app.route("/outputs/multispectral/predictions/<filename>")
 def multispectral_prediction(filename):
     safe_name = secure_filename(filename)
-    if safe_name != filename or Path(safe_name).suffix.lower() not in {".png", ".tif"}:
+    if safe_name != filename or Path(safe_name).suffix.lower() not in {".png", ".tif", ".tiff"}:
         abort(404)
     return send_from_directory(
         MULTISPECTRAL_PREDICTION_FOLDER,
@@ -1393,7 +1414,7 @@ def detection_output(filename):
 
     return send_from_directory(
         DETECTION_RESULT_FOLDER,
-        secure_filename(filename),
+        validate_served_name(filename, {".png", ".jpg", ".jpeg"}),
     )
 
 
@@ -1461,5 +1482,24 @@ def file_too_large(error):
 # ==========================================================
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Phase 8.4: Load the cached RGB model before the first HTTP request.
+    # This moves checkpoint initialization to startup; it does not remove
+    # the initialization cost or preload the other (larger) AI models.
+    from models.segmentation import load_segmentation_model
+
+    app.logger.info("Preloading Phase 3 RGB segmentation model...")
+    preload_start = time.perf_counter()
+    try:
+        load_segmentation_model()
+    except Exception:
+        app.logger.exception("RGB segmentation model preloading failed.")
+        raise
+    app.logger.info(
+        "RGB segmentation model ready in %.3f seconds.",
+        time.perf_counter() - preload_start,
+    )
+
+    # Development only. Production should use a WSGI server and DEBUG=False.
+    # Disabling the reloader prevents a second model initialization process.
+    app.run(host="127.0.0.1", port=5000, debug=FLASK_DEBUG, use_reloader=False)
 
